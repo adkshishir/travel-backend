@@ -141,8 +141,8 @@ model Seo {
   package         Package?
   activity        Activity?
   destination     Destination?
-  author          Author?      @relation(fields: [authorId], references: [id])
-  authorId        Int?
+  author          Author?
+  authorId        Int?         @unique
 }
 
 model Activity {
@@ -153,10 +153,10 @@ model Activity {
   createdAt    DateTime      @default(now())
   destinations Destination[]
   seo          Seo?          @relation(fields: [seoId], references: [id])
-  image        String?
-  seoId        Int?          @unique
-  media        Media?        @relation(fields: [mediaId], references: [id])
-  mediaId      Int?
+
+  seoId   Int?   @unique
+  media   Media? @relation(fields: [mediaId], references: [id])
+  mediaId Int?
 }
 
 model Destination {
@@ -227,34 +227,34 @@ model Faq {
 }
 
 model Booking {
-  id        Int       @id @default(autoincrement())
-  startDate DateTime?
-  endDate   DateTime?
-  packageId Int
-  name      String?
-  email     String?
-  country   String?
-  phone     String?
-  emergency  String?
-  flightArrival String?
-  flightDeparture String?
+  id               Int       @id @default(autoincrement())
+  startDate        DateTime?
+  endDate          DateTime?
+  packageId        Int
+  name             String?
+  email            String?
+  country          String?
+  phone            String?
+  emergency        String?
+  flightArrival    String?
+  flightDeparture  String?
   otherInformation String?
-  status        String    @default("pending")
-  paymentStatus String    @default("pending")
-  tripCode      String?
-  type          String?
-  totalPrice    Int?
-  price         Int?
-  extraPrice    Int?
-  extraDays     Int?
-  extraNights   Int?
-  bookingDate   DateTime?
-  howdidyouhear String?
-  prePayment Float?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  package       Package   @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  payment       Payment?
+  status           String    @default("pending")
+  paymentStatus    String    @default("pending")
+  tripCode         String?
+  type             String?
+  totalPrice       Int?
+  price            Int?
+  extraPrice       Int?
+  extraDays        Int?
+  extraNights      Int?
+  bookingDate      DateTime?
+  howdidyouhear    String?
+  prePayment       Float?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  package          Package   @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  payment          Payment?
 }
 
 model Payment {
@@ -317,8 +317,8 @@ model Author {
   blogs       Blog[]
   media       Media?   @relation(fields: [mediaId], references: [id])
   mediaId     Int?
-  Seo         Seo[]
-
+  Seo         Seo?     @relation(fields: [seoId], references: [id])
+  seoId       Int?     @unique
   @@unique([username, email])
 }
 
