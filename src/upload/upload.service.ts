@@ -1,14 +1,19 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as sharp from 'sharp';
 import * as fs from 'fs';
 import * as path from 'path';
 import { CreateUploadDto } from './dto/create-upload.dto';
+import responseHelper from 'src/utils/response-helper';
 
 @Injectable()
 export class UploadService {
   private baseUploadDir = path.join(__dirname, '../../uploads');
-  private baseUrl = 'http://localhost:8080'; // Replace with your actual base URL
+  private baseUrl = 'http://localhost:8080'; // Update this as needed
 
   constructor(private prisma: PrismaService) {
     if (!fs.existsSync(this.baseUploadDir)) {
@@ -16,92 +21,107 @@ export class UploadService {
     }
   }
 
-  async processAndSave({ file, entity }: CreateUploadDto): Promise<any> {
+  async processAndSave({ file, folder, alt }: CreateUploadDto): Promise<any> {
     if (!file) {
       throw new Error('No file uploaded.');
     }
 
-    // Create folder if not exists
-    const entityDir = path.join(this.baseUploadDir, entity);
-    if (!fs.existsSync(entityDir)) {
-      fs.mkdirSync(entityDir, { recursive: true });
-    }
+    const safeFolder = folder || 'images';
+    const folderPath = path.join(this.baseUploadDir, safeFolder);
 
-    // Get filename (remove spaces & keep extension)
-    const fileExtension = path.extname(file.originalname);
-    const fileName =
-      path
+    try {
+      if (!fs.existsSync(folderPath)) {
+        fs.mkdirSync(folderPath, { recursive: true });
+      }
+
+      const fileExtension = path.extname(file.originalname);
+      const baseFileName = path
         .basename(file.originalname, fileExtension)
         .replace(/\s+/g, '-')
-        .toLowerCase() + '.webp';
+        .toLowerCase();
 
-    // Paths
-    const originalPath = path.join(entityDir, fileName);
-    const cardPath = path.join(entityDir, `card-${fileName}`);
-    const phonePath = path.join(entityDir, `phone-${fileName}`);
+      const webpFileName = `${baseFileName}.webp`;
 
-    // Check if file already exists
-    if (fs.existsSync(originalPath)) {
-      // If file exists, return its path without re-saving
+      // File paths
+      const originalPath = path.join(folderPath, webpFileName);
+      const cardPath = path.join(folderPath, `card-${webpFileName}`);
+      const phonePath = path.join(folderPath, `phone-${webpFileName}`);
+
+      // Check for existing file in DB
       const existingMedia = await this.prisma.media.findFirst({
-        where: { original: `/uploads/${entity}/${fileName}` },
+        where: {
+          original: `${this.baseUrl}/uploads/${safeFolder}/${webpFileName}`,
+        },
       });
 
-      if (existingMedia) {
+      if (fs.existsSync(originalPath) && existingMedia) {
         return existingMedia;
       }
+
+      // Save images in different sizes
+      await sharp(file.buffer).toFormat('webp').toFile(originalPath);
+      await sharp(file.buffer)
+        .resize(300, 200)
+        .toFormat('webp', { quality: 60 })
+        .toFile(cardPath);
+      await sharp(file.buffer)
+        .resize(600)
+        .toFormat('webp', { quality: 50 })
+        .toFile(phonePath);
+
+      const media = await this.prisma.media.create({
+        data: {
+          original: `${this.baseUrl}/uploads/${safeFolder}/${webpFileName}`,
+          thumbnail: `${this.baseUrl}/uploads/${safeFolder}/card-${webpFileName}`,
+          phone: `${this.baseUrl}/uploads/${safeFolder}/phone-${webpFileName}`,
+          type: 'image',
+          alt,
+        },
+      });
+
+      return media;
+    } catch (error) {
+      console.error('Upload Error:', error);
+      throw new InternalServerErrorException(
+        'Failed to process and save the image.',
+      );
     }
-
-    // Save Image in Different Sizes
-    await sharp(file.buffer).toFormat('webp').toFile(originalPath);
-    await sharp(file.buffer)
-      .resize(300, 200)
-      .toFormat('webp', { quality: 60 })
-      .toFile(cardPath);
-    await sharp(file.buffer)
-      .resize(600)
-      .toFormat('webp', { quality: 50 })
-      .toFile(phonePath);
-
-    // Full URL paths
-    const fullOriginalUrl = `${this.baseUrl}/uploads/${entity}/${fileName}`;
-    const fullCardUrl = `${this.baseUrl}/uploads/${entity}/card-${fileName}`;
-    const fullPhoneUrl = `${this.baseUrl}/uploads/${entity}/phone-${fileName}`;
-
-    // Store in DB with full URLs
-    const media = await this.prisma.media.create({
-      data: {
-        original: fullOriginalUrl,
-        thumbnail: fullCardUrl,
-        phone: fullPhoneUrl,
-        type: 'image',
-      },
-    });
-
-    return media;
   }
 
   async deleteFile(id: number) {
-    const media = await this.prisma.media.findUnique({
-      where: { id },
-    });
-    if (media) {
-      // Delete the actual files
-      fs.unlinkSync(
-        path.join(this.baseUploadDir, media.original.replace(this.baseUrl, '')),
-      );
-      fs.unlinkSync(
-        path.join(
-          this.baseUploadDir,
-          media.thumbnail.replace(this.baseUrl, ''),
-        ),
-      );
-      fs.unlinkSync(
-        path.join(this.baseUploadDir, media.phone.replace(this.baseUrl, '')),
-      );
+    try {
+      const media = await this.prisma.media.findUnique({ where: { id } });
 
-      // Delete the media record from DB
+      if (!media) throw new NotFoundException('File not found');
+
+      // const filesToDelete = [media.original, media.thumbnail, media.phone];
+
+      // for (const fileUrl of filesToDelete) {
+      //   try {
+      //     if (fs.existsSync(fileUrl)) {
+      //       fs.unlinkSync(fileUrl);
+      //     }
+      //   } catch (error) {
+      //     throw new Error(`Failed to delete file: ${fileUrl}`);
+      //   }
+      // }
+
       await this.prisma.media.delete({ where: { id } });
+      return media;
+    } catch (error) {
+      throw new InternalServerErrorException(
+        responseHelper.error(error.message),
+      );
+    }
+  }
+  async findAll() {
+    try {
+      const files = await this.prisma.media.findMany();
+      return responseHelper.success('All files', files);
+    } catch (error) {
+      throw new InternalServerErrorException(
+        responseHelper.error(error.message),
+      );
     }
   }
 }

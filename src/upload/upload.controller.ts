@@ -8,13 +8,14 @@ import {
   UploadedFiles,
   Delete,
   Param,
+  Get,
 } from '@nestjs/common';
 import { UploadService } from './upload.service';
 import { CreateUploadDto } from './dto/create-upload.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBody, ApiConsumes } from '@nestjs/swagger';
 
-@Controller('upload')
+@Controller('api/upload')
 export class UploadController {
   constructor(private readonly uploadService: UploadService) {}
   @Post()
@@ -32,5 +33,9 @@ export class UploadController {
   @Delete(':id')
   async deleteFile(@Param('id') id: string) {
     return this.uploadService.deleteFile(+id);
+  }
+  @Get()
+  async findAll() {
+    return this.uploadService.findAll();
   }
 }
