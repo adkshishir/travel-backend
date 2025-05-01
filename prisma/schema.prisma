@@ -59,6 +59,7 @@ model Media {
   mail         Mail[]
   seo          Seo[]
   map          Package[]     @relation("PackageMap")
+  packageMain  Package[]     @relation("PackageMainImage")
   packageId    Int?
 }
 
@@ -200,6 +201,8 @@ model Package {
   includes      String?     @db.LongText
   goodtoknow    String?     @db.LongText
   highlights    String?     @db.LongText
+  mainImage     Media?      @relation("PackageMainImage", fields: [mainImageId], references: [id])
+  mainImageId   Int?
   map           Media?      @relation("PackageMap", fields: [mapId], references: [id])
   mapId         Int?
   createdAt     DateTime    @default(now())
@@ -319,6 +322,7 @@ model Author {
   mediaId     Int?
   Seo         Seo?     @relation(fields: [seoId], references: [id])
   seoId       Int?     @unique
+
   @@unique([username, email])
 }
 
