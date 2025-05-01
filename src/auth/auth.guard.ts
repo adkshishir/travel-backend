@@ -32,7 +32,9 @@ export class AuthGuard implements CanActivate {
         secret: process.env.JWT_SECRET,
       });
     } catch (error) {
-      throw new UnauthorizedException(responseHelper.error('Malformed token'));
+      throw new UnauthorizedException(
+        responseHelper.error('You did something wrong with the token'),
+      );
     }
 
     if (!decoded) {
@@ -41,6 +43,9 @@ export class AuthGuard implements CanActivate {
     const user = await this.prisma.user.findUnique({
       where: {
         id: decoded.id,
+        role: {
+          in: ['AUTHOR', 'ADMIN'],
+        },
       },
     });
     if (!user) {

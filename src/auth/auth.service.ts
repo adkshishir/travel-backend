@@ -1,10 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import {
   EmailRegisterDto,
-  RegisterDto,
-  UpdateUserDto,
   VerfiyEmailRegisterDto,
-  VerfiyRegisterDto,
 } from './dto/create-auth.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { MailerService } from 'src/mail/mail.service';
@@ -50,7 +47,9 @@ export class AuthService {
           }),
         );
       }
-      return responseHelper.success('OTP sent to your Email');
+      return responseHelper.success('OTP sent to your Email', {
+        email: registerDto.email,
+      });
     }
 
     const verifyOtp = Math.floor(100000 + Math.random() * 900000);
@@ -79,7 +78,9 @@ export class AuthService {
         }),
       );
     }
-    return responseHelper.success('OTP sent to your phone');
+    return responseHelper.success('OTP sent to your phone', {
+      email: registerDto.email,
+    });
   }
   async emailAuthVerify(verifyRegisterDto: VerfiyEmailRegisterDto) {
     const existUser = await this.prisma.user.findUnique({

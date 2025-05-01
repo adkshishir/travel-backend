@@ -16,14 +16,14 @@ export class CreateUploadDto {
     type: 'string',
     format: 'binary',
   })
-  @IsOptional()
   file: Express.Multer.File;
 
-  @ApiProperty({
-    description: 'Entity associated with the file',
-    type: String,
-  })
-  @IsString()
+  @ApiProperty()
   @IsOptional()
-  entity: string;
+  @IsString()
+  folder?: string;
+  @ApiProperty()
+  @IsOptional()
+  @IsString()
+  alt?: string;
 }
