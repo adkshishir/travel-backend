@@ -13,7 +13,7 @@ import responseHelper from 'src/utils/response-helper';
 @Injectable()
 export class UploadService {
   private baseUploadDir = path.join(__dirname, '../../uploads');
-  private baseUrl = 'http://localhost:8080'; // Update this as needed
+  private baseUrl = 'https://api-poonhill.adhikarishishir.com.np'; // Update this as needed
 
   constructor(private prisma: PrismaService) {
     if (!fs.existsSync(this.baseUploadDir)) {
