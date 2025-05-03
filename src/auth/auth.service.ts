@@ -60,7 +60,7 @@ export class AuthService {
       },
       data: {
         otp: verifyOtp.toString(),
-        role: 'USER',
+        // role: 'USER',
       },
     });
     const emailText = `Your OTP is ${verifyOtp}`;
