@@ -49,7 +49,9 @@ export class AuthGuard implements CanActivate {
       },
     });
     if (!user) {
-      throw new UnauthorizedException(responseHelper.error('User not found'));
+      throw new UnauthorizedException(
+        responseHelper.error('User not found or donot have access'),
+      );
     }
     request.user = user;
     return true;

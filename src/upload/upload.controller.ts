@@ -9,11 +9,13 @@ import {
   Delete,
   Param,
   Get,
+  UseGuards,
 } from '@nestjs/common';
 import { UploadService } from './upload.service';
 import { CreateUploadDto } from './dto/create-upload.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBody, ApiConsumes } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiConsumes } from '@nestjs/swagger';
+import { AuthGuard } from 'src/auth/auth.guard';
 
 @Controller('api/upload')
 export class UploadController {
@@ -22,6 +24,8 @@ export class UploadController {
   @ApiConsumes('multipart/form-data') // Specify the content type for Swagger
   @UseInterceptors(FileInterceptor('file'))
   @ApiBody({ type: CreateUploadDto })
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard)
   async uploadSingle(
     @Body(new ValidationPipe()) createUploadDto: CreateUploadDto,
     @UploadedFile() file: Express.Multer.File,
@@ -30,6 +34,8 @@ export class UploadController {
     createUploadDto.file = file;
     return this.uploadService.processAndSave(createUploadDto);
   }
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard)
   @Delete(':id')
   async deleteFile(@Param('id') id: string) {
     return this.uploadService.deleteFile(+id);

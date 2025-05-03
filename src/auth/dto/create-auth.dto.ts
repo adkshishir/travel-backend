@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { IsEmail } from 'class-validator';
 
 export class RegisterDto {
   @ApiProperty({ example: '98xxxx' })
@@ -25,10 +26,15 @@ export class VerfiyEmailRegisterDto {
   otp: string;
 }
 
-export class UpdateUserDto{
+export class UpdateUserDto {
   @ApiProperty({ example: '98xxxx' })
   phone: string;
   @ApiProperty({ example: 'john@gmail.com' })
   email: string;
-  
+}
+
+export class CreateAdminDto {
+  @IsEmail()
+  @ApiProperty({ example: 'john@gmail.com' })
+  email: string;
 }

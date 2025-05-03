@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import {
+  CreateAdminDto,
   EmailRegisterDto,
   VerfiyEmailRegisterDto,
 } from './dto/create-auth.dto';
@@ -129,6 +130,41 @@ export class AuthService {
           otp: ['Invalid OTP'],
         }),
       );
+    }
+  }
+  async initAdmins() {
+    const user = await this.prisma.user.findUnique({
+      where: {
+        email: process.env.ADMIN_EMAIL || 'adhikarishishir50@gmail.com',
+      },
+    });
+    if (!user) {
+      await this.prisma.user.create({
+        data: {
+          email: process.env.ADMIN_EMAIL || 'adhikarishishir50@gmail.com',
+          role: 'ADMIN',
+        },
+      });
+      return responseHelper.success('Admin created successfully');
+    } else {
+      throw new BadRequestException(
+        responseHelper.error('Admin already exists', {
+          email: ['Admin already exists'],
+        }),
+      );
+    }
+  }
+  async createAdmin(createAdminDto: CreateAdminDto) {
+    try {
+      const admin = await this.prisma.user.create({
+        data: {
+          ...createAdminDto,
+          role: 'ADMIN',
+        },
+      });
+      return responseHelper.success('Admin created successfully', admin);
+    } catch (error) {
+      return responseHelper.error('Failed to create admin', error.message);
     }
   }
 }

@@ -6,11 +6,13 @@ import {
   Patch,
   Param,
   Delete,
+  UseGuards,
 } from '@nestjs/common';
 import { ActivitiesService } from './activities.service';
 import { CreateActivityDto } from './dto/create-activity.dto';
 import { UpdateActivityDto } from './dto/update-activity.dto';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { AuthGuard } from 'src/auth/auth.guard';
 
 @Controller('api/activities')
 @ApiTags('activities')
@@ -19,6 +21,8 @@ export class ActivitiesController {
 
   @Post()
   @ApiBearerAuth()
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard)
   create(@Body() createActivityDto: CreateActivityDto) {
     return this.activitiesService.create(createActivityDto);
   }
@@ -35,7 +39,8 @@ export class ActivitiesController {
   findOne(@Param('slug') slug: string) {
     return this.activitiesService.findOne(slug);
   }
-
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard)
   @Patch(':id')
   update(
     @Param('id') id: string,
@@ -43,7 +48,8 @@ export class ActivitiesController {
   ) {
     return this.activitiesService.update(+id, updateActivityDto);
   }
-
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard)
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.activitiesService.remove(+id);
