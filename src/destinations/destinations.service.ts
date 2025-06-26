@@ -25,6 +25,7 @@ export class DestinationsService {
         }),
       );
     }
+
     try {
       const destination = await this.prisma.destination.create({
         data: {
@@ -38,10 +39,10 @@ export class DestinationsService {
                 }
               : undefined,
           },
+          // activityId: createDestinationDto.activityId,
           activity: {
             connect: {
-              id: Number(createDestinationDto.activityId),
-              mediaId: createDestinationDto?.seo?.mediaId || undefined,
+              id: createDestinationDto.activityId,
             },
           },
           seo: {
@@ -193,7 +194,7 @@ export class DestinationsService {
         },
         activity: {
           connect: {
-            id: Number(updateDestinationDto.activityId),
+            id: updateDestinationDto.activityId,
           },
         },
         seo: {
