@@ -31,8 +31,8 @@ export class CarouselsController {
   }
 
   @Get(':page')
-  findOne(@Param('page') page: string) {
-    return this.carouselsService.findOne(page);
+  findByPage(@Param('page') page: string) {
+    return this.carouselsService.findByPage(page);
   }
   @Get('/getbyid/:id')
   findOneById(@Param('id') id: string) {

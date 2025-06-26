@@ -41,14 +41,17 @@ export class CarouselsService {
     return responseHelper.success('All carousels', carousels);
   }
 
-  async findOne(page: string) {
+  async findByPage(page: string) {
     const carousels = await this.prisma.carousel.findMany({
       where: {
         page,
       },
+      orderBy: {
+        createdAt: 'desc',
+      },
       include: {
-        media: true
-      }
+        media: true,
+      },
     });
     if (!carousels.length) {
       throw new NotFoundException(responseHelper.error('No data found', null));
@@ -62,7 +65,7 @@ export class CarouselsService {
       },
       include: {
         media: true,
-      }
+      },
     });
     if (!carousel) {
       throw new NotFoundException(
