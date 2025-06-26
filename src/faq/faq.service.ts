@@ -30,15 +30,53 @@ export class FaqService {
     return responseHelper.success('All faqs', faqs);
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} faq`;
+  async findOne(id: number) {
+    const faq = await this.prisma.faq.findUnique({
+      where: {
+        id: id,
+      },
+    });
+    if (!faq) {
+      throw new NotFoundException(responseHelper.error('Faq not found', null));
+    }
+    return responseHelper.success('Faq found', faq);
   }
 
-  update(id: number, updateFaqDto: UpdateFaqDto) {
-    return `This action updates a #${id} faq`;
+  async update(id: number, updateFaqDto: UpdateFaqDto) {
+    const faq = await this.prisma.faq.findUnique({
+      where: {
+        id: id,
+      },
+    });
+    if (!faq) {
+      throw new NotFoundException(responseHelper.error('Faq not found', null));
+    }
+    const response = await this.prisma.faq.update({
+      where: {
+        id: id,
+      },
+      data: {
+        question: updateFaqDto.question,
+        answer: updateFaqDto.answer,
+      },
+    });
+    return responseHelper.success('Faq updated successfully', response);
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} faq`;
+  async remove(id: number) {
+    const faq = await this.prisma.faq.findUnique({
+      where: {
+        id: id,
+      },
+    });
+    if (!faq) {
+      throw new NotFoundException(responseHelper.error('Faq not found', null));
+    }
+    const response = await this.prisma.faq.delete({
+      where: {
+        id: id,
+      },
+    });
+    return responseHelper.success('Faq deleted successfully', response);
   }
 }
