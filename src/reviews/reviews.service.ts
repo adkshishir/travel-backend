@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, InternalServerErrorException } from '@nestjs/common';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -16,82 +16,108 @@ export class ReviewsService {
       });
       return responseHelper.success('Review created successfully', newReview);
     } catch (error) {
-      return responseHelper.error('Failed to create review', error.message);
+      throw new InternalServerErrorException(
+        responseHelper.error('Failed to create review', error.message),
+      );
     }
   }
 
   async findAll() {
-    const reviews = await this.prisma.review.findMany({
-      include: {
-        media: {
-          select: {
-            thumbnail: true,
-            alt: true,
+    try {
+      const reviews = await this.prisma.review.findMany({
+        include: {
+          media: {
+            select: {
+              thumbnail: true,
+              alt: true,
+            },
           },
         },
-      },
-    });
-    return responseHelper.success('All reviews', reviews);
+      });
+      return responseHelper.success('All reviews', reviews);
+    } catch (error) {
+      throw new InternalServerErrorException(
+        responseHelper.error('Failed to retrieve reviews', error.message),
+      );
+    }
   }
 
   async findOne(id: number) {
-    const review = await this.prisma.review.findUnique({
-      where: {
-        id,
-      },
-      include: {
-        media: true,
-      },
-    });
-
-    if (!review) {
-      throw new NotFoundException(
-        responseHelper.error(`Review with ID ${id} not found.`),
+    try {
+      const review = await this.prisma.review.findUnique({
+        where: {
+          id,
+        },
+        include: {
+          media: true,
+        },
+      });
+      if (!review) {
+        throw new NotFoundException(
+          responseHelper.error(`Review with ID ${id} not found.`),
+        );
+      }
+      return responseHelper.success('Review retrieved successfully', review);
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      throw new InternalServerErrorException(
+        responseHelper.error('Failed to retrieve review', error.message),
       );
     }
-    return responseHelper.success('Review retrieved successfully', review);
   }
 
   async update(id: number, updateReviewDto: UpdateReviewDto) {
-    const review = await this.prisma.review.findUnique({
-      where: {
-        id,
-      },
-    });
-
-    if (!review) {
-      throw new NotFoundException(
-        responseHelper.error(`Review with ID ${id} not found.`),
+    try {
+      const review = await this.prisma.review.findUnique({
+        where: {
+          id,
+        },
+      });
+      if (!review) {
+        throw new NotFoundException(
+          responseHelper.error(`Review with ID ${id} not found.`),
+        );
+      }
+      const updatedReview = await this.prisma.review.update({
+        where: {
+          id,
+        },
+        data: {
+          ...updateReviewDto,
+        },
+      });
+      return responseHelper.success('Review updated successfully', updatedReview);
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      throw new InternalServerErrorException(
+        responseHelper.error('Failed to update review', error.message),
       );
     }
-    const updatedReview = await this.prisma.review.update({
-      where: {
-        id,
-      },
-      data: {
-        ...updateReviewDto,
-      },
-    });
-    return responseHelper.success('Review updated successfully', updatedReview);
   }
 
   async remove(id: number) {
-    const review = await this.prisma.review.findUnique({
-      where: {
-        id,
-      },
-    });
-
-    if (!review) {
-      throw new NotFoundException(
-        responseHelper.error(`Review with ID ${id} not found.`),
+    try {
+      const review = await this.prisma.review.findUnique({
+        where: {
+          id,
+        },
+      });
+      if (!review) {
+        throw new NotFoundException(
+          responseHelper.error(`Review with ID ${id} not found.`),
+        );
+      }
+      await this.prisma.review.delete({
+        where: {
+          id,
+        },
+      });
+      return responseHelper.success('Review deleted successfully');
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      throw new InternalServerErrorException(
+        responseHelper.error('Failed to delete review', error.message),
       );
     }
-    await this.prisma.review.delete({
-      where: {
-        id,
-      },
-    });
-    return responseHelper.success('Review deleted successfully');
   }
 }

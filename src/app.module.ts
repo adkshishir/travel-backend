@@ -15,6 +15,7 @@ import { BookingModule } from './booking/booking.module';
 import { CarouselsModule } from './carousels/carousels.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { FaqModule } from './faq/faq.module';
+import { BlogsModule } from './blogs/blogs.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { FaqModule } from './faq/faq.module';
     BookingModule,
     ReviewsModule,
     FaqModule,
+    BlogsModule,
     // SeoModule,
   ],
   controllers: [AppController],

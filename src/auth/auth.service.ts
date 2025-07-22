@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException } from '@nestjs/common';
 import {
   CreateAdminDto,
   EmailRegisterDto,
@@ -164,7 +164,9 @@ export class AuthService {
       });
       return responseHelper.success('Admin created successfully', admin);
     } catch (error) {
-      return responseHelper.error('Failed to create admin', error.message);
+      throw new InternalServerErrorException(
+        responseHelper.error('Failed to create admin', error.message),
+      );
     }
   }
 }

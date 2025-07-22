@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsInt, IsOptional, IsString, MaxLength } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class CreateSeoDto {
   @ApiProperty()
@@ -18,6 +19,12 @@ export class CreateSeoDto {
   @ApiProperty()
   metaKeywords?: string;
 
+  @Transform(({ value }) => {
+    if (value === '' || value === null || value === undefined) {
+      return undefined;
+    }
+    return parseInt(value);
+  })
   @IsOptional()
   @IsInt()
   @ApiProperty()

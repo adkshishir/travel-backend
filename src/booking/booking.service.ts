@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, InternalServerErrorException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingDto } from './dto/update-booking.dto';
@@ -15,8 +15,9 @@ export class BookingService {
       });
       return responseHelper.success('Booking created successfully', booking);
     } catch (error) {
-      console.error('Error creating booking:', error);
-      return responseHelper.error('Failed to create booking', error.message);
+      throw new InternalServerErrorException(
+        responseHelper.error('Failed to create booking', error.message),
+      );
     }
   }
 
@@ -28,8 +29,9 @@ export class BookingService {
         bookings,
       );
     } catch (error) {
-      console.error('Error retrieving bookings:', error);
-      return responseHelper.error('Failed to retrieve bookings', error.message);
+      throw new InternalServerErrorException(
+        responseHelper.error('Failed to retrieve bookings', error.message),
+      );
     }
   }
 
@@ -38,15 +40,17 @@ export class BookingService {
       const booking = await this.prisma.booking.findUnique({
         where: { id },
       });
-
       if (!booking) {
-        throw new NotFoundException(`Booking with ID ${id} not found`);
+        throw new NotFoundException(
+          responseHelper.error(`Booking with ID ${id} not found`),
+        );
       }
-
       return responseHelper.success('Booking retrieved successfully', booking);
     } catch (error) {
-      console.error(`Error retrieving booking with ID ${id}:`, error);
-      return responseHelper.error('Failed to retrieve booking', error.message);
+      if (error instanceof NotFoundException) throw error;
+      throw new InternalServerErrorException(
+        responseHelper.error('Failed to retrieve booking', error.message),
+      );
     }
   }
 
@@ -58,8 +62,14 @@ export class BookingService {
       });
       return responseHelper.success('Booking updated successfully', booking);
     } catch (error) {
-      console.error(`Error updating booking with ID ${id}:`, error);
-      return responseHelper.error('Failed to update booking', error.message);
+      if (error.code === 'P2025') {
+        throw new NotFoundException(
+          responseHelper.error(`Booking with ID ${id} not found`),
+        );
+      }
+      throw new InternalServerErrorException(
+        responseHelper.error('Failed to update booking', error.message),
+      );
     }
   }
 
@@ -70,8 +80,14 @@ export class BookingService {
       });
       return responseHelper.success('Booking deleted successfully', booking);
     } catch (error) {
-      console.error(`Error deleting booking with ID ${id}:`, error);
-      return responseHelper.error('Failed to delete booking', error.message);
+      if (error.code === 'P2025') {
+        throw new NotFoundException(
+          responseHelper.error(`Booking with ID ${id} not found`),
+        );
+      }
+      throw new InternalServerErrorException(
+        responseHelper.error('Failed to delete booking', error.message),
+      );
     }
   }
 }

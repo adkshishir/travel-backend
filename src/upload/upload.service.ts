@@ -2,6 +2,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as sharp from 'sharp';
@@ -23,7 +24,9 @@ export class UploadService {
 
   async processAndSave({ file, folder, alt }: CreateUploadDto): Promise<any> {
     if (!file) {
-      throw new Error('No file uploaded.');
+      throw new BadRequestException(
+        responseHelper.error('No file uploaded.'),
+      );
     }
 
     const safeFolder = folder || 'images';
@@ -83,7 +86,7 @@ export class UploadService {
     } catch (error) {
       console.error('Upload Error:', error);
       throw new InternalServerErrorException(
-        'Failed to process and save the image.',
+        responseHelper.error('Failed to process and save the image.', error.message),
       );
     }
   }
@@ -92,7 +95,7 @@ export class UploadService {
     try {
       const media = await this.prisma.media.findUnique({ where: { id } });
 
-      if (!media) throw new NotFoundException('File not found');
+      if (!media) throw new NotFoundException(responseHelper.error('File not found'));
 
       // const filesToDelete = [media.original, media.thumbnail, media.phone];
 
@@ -107,10 +110,11 @@ export class UploadService {
       // }
 
       await this.prisma.media.delete({ where: { id } });
-      return media;
+      return responseHelper.success('File deleted successfully', media);
     } catch (error) {
+      if (error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException(
-        responseHelper.error(error.message),
+        responseHelper.error('Failed to delete file', error.message),
       );
     }
   }
@@ -120,7 +124,7 @@ export class UploadService {
       return responseHelper.success('All files', files);
     } catch (error) {
       throw new InternalServerErrorException(
-        responseHelper.error(error.message),
+        responseHelper.error('Failed to retrieve files', error.message),
       );
     }
   }
