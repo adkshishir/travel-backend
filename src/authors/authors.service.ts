@@ -35,19 +35,23 @@ export class AuthorsService {
           bio: createAuthorDto.bio,
           socialLinks: createAuthorDto.socialLinks,
           website: createAuthorDto.website,
+          role: createAuthorDto.role || 'author',
+          status: createAuthorDto.status || 'active',
+          mediaId: createAuthorDto.mediaId,
         },
+        include: { media: true },
       });
       if (!author) {
         throw new InternalServerErrorException(
           responseHelper.error('Author not created', null),
         );
       }
-      return responseHelper.success('Author: Firstname Lastname', author);
+      return responseHelper.success('Author created successfully', author);
     } catch (error) {
       throw new InternalServerErrorException(
         responseHelper.error(
-          (await error.Message) || 'Author not created Internal Server Error',
-          await error,
+          error?.message || 'Author not created Internal Server Error',
+          error,
         ),
       );
     }
@@ -55,11 +59,8 @@ export class AuthorsService {
 
   async findAll() {
     const authors = await this.prisma.author.findMany({
-      select: {
-        name: true,
-        username: true,
-        email: true,
-        id: true,
+      include: {
+        media: true,
       },
     });
     if (!authors.length) {
@@ -74,6 +75,18 @@ export class AuthorsService {
   async findOne(id: number) {
     const author = await this.prisma.author.findUnique({
       where: { id },
+      include: {
+        media: true,
+        blogs: {
+          select: {
+            id: true,
+            title: true,
+            slug: true,
+            createdAt: true,
+            isPublished: true,
+          },
+        },
+      },
     });
     if (!author) {
       throw new NotFoundException(
@@ -95,8 +108,9 @@ export class AuthorsService {
     const updatedAuthor = await this.prisma.author.update({
       where: { id },
       data: updateAuthorDto,
+      include: { media: true },
     });
-    return responseHelper.success('Author: Firstname Lastname', updatedAuthor);
+    return responseHelper.success('Author updated successfully', updatedAuthor);
   }
 
   async remove(id: number) {
@@ -111,6 +125,6 @@ export class AuthorsService {
     const deletedAuthor = await this.prisma.author.delete({
       where: { id },
     });
-    return responseHelper.success('Author: Firstname Lastname', deletedAuthor);
+    return responseHelper.success('Author deleted successfully', deletedAuthor);
   }
 }

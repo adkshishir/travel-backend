@@ -1,8 +1,9 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
 import { BlogsService } from './blogs.service';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CreateBlogDto } from './dto/create-blog.dto';
 import { UpdateBlogDto } from './dto/update-blog.dto';
+import { AuthGuard } from '../auth/auth.guard';
 
 @ApiTags('Blogs')
 @Controller('api/blogs')
@@ -11,6 +12,8 @@ export class BlogsController {
 
   @Post()
   @ApiOperation({ summary: 'Create a new blog' })
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard)
   create(@Body() createBlogDto: CreateBlogDto) {
     return this.blogsService.create(createBlogDto);
   }
@@ -29,12 +32,16 @@ export class BlogsController {
 
   @Patch(':slug')
   @ApiOperation({ summary: 'Update a blog by slug' })
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard)
   update(@Param('slug') slug: string, @Body() updateBlogDto: UpdateBlogDto) {
     return this.blogsService.update(slug, updateBlogDto);
   }
 
   @Delete(':slug')
   @ApiOperation({ summary: 'Delete a blog by slug' })
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard)
   remove(@Param('slug') slug: string) {
     return this.blogsService.remove(slug);
   }

@@ -1,33 +1,54 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString, IsEmail, IsInt, IsIn } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class CreateAuthorDto {
-  @ApiProperty()
+  @ApiProperty({ example: 'John Doe' })
   @IsString()
-  @IsOptional()
   name: string;
-  @ApiProperty()
+
+  @ApiProperty({ example: 'johndoe' })
   @IsString()
-  @IsOptional()
   username: string;
-  @ApiProperty()
-  @IsString()
-  @IsOptional()
+
+  @ApiProperty({ example: 'john@example.com' })
+  @IsEmail()
   email: string;
-  @ApiProperty()
-  @IsString()
+
+  @ApiProperty({ example: 'Experienced travel writer and blogger', required: false })
   @IsOptional()
-  bio: string;
-  @ApiProperty()
   @IsString()
+  bio?: string;
+
+  @ApiProperty({ example: 'https://johndoe.com', required: false })
   @IsOptional()
-  profilePicture: string;
-  @ApiProperty()
   @IsString()
+  website?: string;
+
+  @ApiProperty({ example: 'author', enum: ['author', 'editor', 'contributor', 'guest'], required: false })
   @IsOptional()
-  socialLinks: string;
-  @ApiProperty()
   @IsString()
+  @IsIn(['author', 'editor', 'contributor', 'guest'])
+  role?: string;
+
+  @ApiProperty({ example: 'active', enum: ['active', 'inactive', 'suspended'], required: false })
   @IsOptional()
-  website: string;
+  @IsString()
+  @IsIn(['active', 'inactive', 'suspended'])
+  status?: string;
+
+  @ApiProperty({ example: 1, required: false })
+  @Transform(({ value }) => {
+    if (value === '' || value === null || value === undefined) {
+      return undefined;
+    }
+    return parseInt(value);
+  })
+  @IsOptional()
+  @IsInt()
+  mediaId?: number;
+
+  @ApiProperty({ description: 'Social media links and profiles' })
+  @IsOptional()
+  socialLinks?: any;
 }

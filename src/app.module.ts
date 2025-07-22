@@ -16,26 +16,27 @@ import { CarouselsModule } from './carousels/carousels.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { FaqModule } from './faq/faq.module';
 import { BlogsModule } from './blogs/blogs.module';
+import { AuthorsModule } from './authors/authors.module';
 
 @Module({
   imports: [
-    UploadModule,
     PrismaModule,
+    AuthModule,
+    UploadModule,
     ActivitiesModule,
     DestinationsModule,
-    AuthModule,
-    CarouselsModule,
-    ServeStaticModule.forRoot({
-      rootPath: join(__dirname, '..', 'uploads'), // Path to your uploads folder
-      serveRoot: '/uploads', // URL prefix for static files
-    }),
     PackagesModule,
-    SiteInfoModule,
-    BookingModule,
+    CarouselsModule,
     ReviewsModule,
     FaqModule,
     BlogsModule,
-    // SeoModule,
+    AuthorsModule,
+    SiteInfoModule,
+    BookingModule,
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', 'uploads'),
+      serveRoot: '/uploads',
+    }),
   ],
   controllers: [AppController],
   providers: [AppService, PrismaService],
