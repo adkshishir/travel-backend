@@ -91,4 +91,9 @@ export class CreateSiteInfoDto {
   @IsOptional()
   @IsString()
   footerAbout?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  embedVideo?: string;
 }

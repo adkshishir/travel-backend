@@ -35,6 +35,7 @@ model SiteInformation {
   whatsapp    String?
   openingTime String?
   footerAbout String?
+  embedVideo  String?  @db.MediumText
 }
 
 model Media {
@@ -188,7 +189,7 @@ model Package {
   altitude      String?
   bestSeason    String?
   price         String?
-  videoLink     String?
+  videoLink     String?     @db.MediumText
   rating        Int?        @default(5)
   culture       String?
   attractions   String?
