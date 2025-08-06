@@ -23,7 +23,35 @@ export class BookingService {
 
   async findAll() {
     try {
-      const bookings = await this.prisma.booking.findMany();
+      const bookings = await this.prisma.booking.findMany({
+        include: {
+          package: {
+            select: {
+              id: true,
+              title: true,
+              slug: true,
+              price: true,
+              destination: {
+                select: {
+                  id: true,
+                  name: true,
+                  slug: true,
+                  activity: {
+                    select: {
+                      id: true,
+                      name: true,
+                      slug: true,
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        orderBy: {
+          createdAt: 'desc'
+        }
+      });
       return responseHelper.success(
         'All bookings retrieved successfully',
         bookings,
@@ -39,6 +67,17 @@ export class BookingService {
     try {
       const booking = await this.prisma.booking.findUnique({
         where: { id },
+        include: {
+          package: {
+            include: {
+              destination: {
+                include: {
+                  activity: true
+                }
+              }
+            }
+          }
+        }
       });
       if (!booking) {
         throw new NotFoundException(
