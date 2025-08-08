@@ -5,7 +5,7 @@ import {
   VerfiyEmailRegisterDto,
 } from './dto/create-auth.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { MailerService } from 'src/mail/mail.service';
+import { MailerService } from 'src/mail/mailer.service';
 import responseHelper from 'src/utils/response-helper';
 import { JwtService } from '@nestjs/jwt';
 

@@ -5,7 +5,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 
 import { ConfigModule } from '@nestjs/config';
-import { MailerService } from 'src/mail/mail.service';
+import { MailerService } from 'src/mail/mailer.service';
 
 @Module({
   imports: [ConfigModule],

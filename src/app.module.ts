@@ -17,6 +17,7 @@ import { ReviewsModule } from './reviews/reviews.module';
 import { FaqModule } from './faq/faq.module';
 import { BlogsModule } from './blogs/blogs.module';
 import { AuthorsModule } from './authors/authors.module';
+import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { AuthorsModule } from './authors/authors.module';
     AuthorsModule,
     SiteInfoModule,
     BookingModule,
+    MailModule,
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'uploads'),
       serveRoot: '/uploads',
