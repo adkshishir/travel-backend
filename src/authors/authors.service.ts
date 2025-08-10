@@ -12,20 +12,31 @@ import responseHelper from 'src/utils/response-helper';
 @Injectable()
 export class AuthorsService {
   constructor(private readonly prisma: PrismaService) {}
-  async create(createAuthorDto: CreateAuthorDto) {
-    const exitAuthor = await this.prisma.author.findUnique({
-      where: {
-        email: createAuthorDto.email,
+  async create(createAuthorDto: CreateAuthorDto): Promise<any> {
+    // Check for existing email (email is unique)
+    const existingEmail = await this.prisma.author.findUnique({
+      where: { email: createAuthorDto.email },
+    });
+
+    // Check for existing username+email combination
+    const existingUsernameEmail = await this.prisma.author.findUnique({
+      where: { 
+        username_email: {
+          username: createAuthorDto.username,
+          email: createAuthorDto.email
+        }
       },
     });
-    if (exitAuthor) {
+
+    if (existingEmail) {
+      const validationErrors: Record<string, string[]> = {};
+      validationErrors.email = ['Email already exists'];
+
       throw new BadRequestException(
-        responseHelper.error('Author: Email and Username already exists', {
-          username: ['username already exists'],
-          email: ['email already exists'],
-        }),
+        responseHelper.validationError('Validation failed', validationErrors),
       );
     }
+
     try {
       const author = await this.prisma.author.create({
         data: {
@@ -41,16 +52,22 @@ export class AuthorsService {
         },
         include: { media: true },
       });
+
       if (!author) {
         throw new InternalServerErrorException(
-          responseHelper.error('Author not created', null),
+          responseHelper.internalError('Failed to create author'),
         );
       }
+
       return responseHelper.success('Author created successfully', author);
     } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
       throw new InternalServerErrorException(
-        responseHelper.error(
-          error?.message || 'Author not created Internal Server Error',
+        responseHelper.internalError(
+          'An error occurred while creating the author',
           error,
         ),
       );
