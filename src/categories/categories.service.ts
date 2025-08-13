@@ -76,7 +76,7 @@ export class CategoriesService {
           { endpoint: identifier },
           { slug: identifier },
         ],
-        isActive: true,
+      
       },
       include: {
         seo: {
