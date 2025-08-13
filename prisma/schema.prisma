@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -39,29 +33,28 @@ model SiteInformation {
 }
 
 model Media {
-  id        Int      @id @default(autoincrement())
-  alt       String?
-  original  String?
-  thumbnail String?
-  phone     String?
-  type      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  packages     Package[]     @relation("mediaPackages")
-  activities   Activity[]
-  destinations Destination[]
-  blogs        Blog[]
-  reviews      Review[]
-  carousel     Carousel[]
-  team         Team[]
-  author       Author[]
-  payment      Payment[]
-  mail         Mail[]
-  seo          Seo[]
-  map          Package[]     @relation("PackageMap")
-  packageMain  Package[]     @relation("PackageMainImage")
+  id           Int           @id @default(autoincrement())
+  alt          String?
+  original     String?
+  thumbnail    String?
+  phone        String?
+  type         String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
   packageId    Int?
+  activities   Activity[]
+  author       Author[]
+  blogs        Blog[]
+  carousel     Carousel[]
+  destinations Destination[]
+  mail         Mail[]
+  packageMain  Package[]     @relation("PackageMainImage")
+  map          Package[]     @relation("PackageMap")
+  reviews      Review[]
+  seo          Seo[]
+  team         Team[]
+  payment      Payment[]
+  packages     Package[]     @relation("mediaPackages")
 }
 
 model Review {
@@ -71,12 +64,15 @@ model Review {
   title       String?
   rating      Int?     @default(5)
   packageId   Int?
-  package     Package? @relation(fields: [packageId], references: [id], onDelete: Cascade)
   reviewDate  DateTime @default(now())
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  media       Media?   @relation(fields: [mediaId], references: [id])
   mediaId     Int?
+  media       Media?   @relation(fields: [mediaId], references: [id])
+  package     Package? @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@index([mediaId], map: "Review_mediaId_fkey")
+  @@index([packageId], map: "Review_packageId_fkey")
 }
 
 model User {
@@ -102,8 +98,10 @@ model Carousel {
   page        String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  media       Media?   @relation(fields: [mediaId], references: [id])
   mediaId     Int?
+  media       Media?   @relation(fields: [mediaId], references: [id])
+
+  @@index([mediaId], map: "Carousel_mediaId_fkey")
 }
 
 model Blog {
@@ -115,17 +113,20 @@ model Blog {
   subtitle    String?
   link        String?
   page        String?
-  seo         Seo?      @relation(fields: [seoId], references: [id])
   seoId       Int?      @unique
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-  author      Author?   @relation(fields: [authorId], references: [id])
   authorId    Int?
-  comments    Comment[]
   publisher   String?
   isPublished Boolean?  @default(true)
-  media       Media?    @relation(fields: [mediaId], references: [id])
   mediaId     Int?
+  author      Author?   @relation(fields: [authorId], references: [id])
+  media       Media?    @relation(fields: [mediaId], references: [id])
+  seo         Seo?      @relation(fields: [seoId], references: [id])
+  comments    Comment[]
+
+  @@index([authorId], map: "Blog_authorId_fkey")
+  @@index([mediaId], map: "Blog_mediaId_fkey")
 }
 
 model Seo {
@@ -133,18 +134,21 @@ model Seo {
   metaTitle       String?
   metaDescription String?      @db.MediumText
   metaKeywords    String?      @db.MediumText
-  media           Media?       @relation(fields: [mediaId], references: [id])
   mediaId         Int?
   metaCanonical   String?
   schema          String?      @db.MediumText
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
-  blog            Blog?
-  package         Package?
-  activity        Activity?
-  destination     Destination?
-  author          Author?
   authorId        Int?         @unique
+  activity        Activity?
+  author          Author?
+  blog            Blog?
+  category        Category?
+  destination     Destination?
+  package         Package?
+  media           Media?       @relation(fields: [mediaId], references: [id])
+
+  @@index([mediaId], map: "Seo_mediaId_fkey")
 }
 
 model Activity {
@@ -153,12 +157,13 @@ model Activity {
   description  String?
   slug         String?       @unique
   createdAt    DateTime      @default(now())
-  destinations Destination[]
+  seoId        Int?          @unique
+  mediaId      Int?
+  media        Media?        @relation(fields: [mediaId], references: [id])
   seo          Seo?          @relation(fields: [seoId], references: [id])
+  destinations Destination[]
 
-  seoId   Int?   @unique
-  media   Media? @relation(fields: [mediaId], references: [id])
-  mediaId Int?
+  @@index([mediaId], map: "Activity_mediaId_fkey")
 }
 
 model Destination {
@@ -166,14 +171,17 @@ model Destination {
   name        String?
   slug        String?   @unique
   description String?
-  activity    Activity  @relation(fields: [activityId], references: [id], onDelete: Cascade)
   activityId  Int
   createdAt   DateTime  @default(now())
-  packages    Package[]
-  seo         Seo?      @relation(fields: [seoId], references: [id])
   seoId       Int?      @unique
-  media       Media?    @relation(fields: [mediaId], references: [id])
   mediaId     Int?
+  activity    Activity  @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  media       Media?    @relation(fields: [mediaId], references: [id])
+  seo         Seo?      @relation(fields: [seoId], references: [id])
+  packages    Package[]
+
+  @@index([activityId], map: "Destination_activityId_fkey")
+  @@index([mediaId], map: "Destination_mediaId_fkey")
 }
 
 model Package {
@@ -202,22 +210,26 @@ model Package {
   includes      String?     @db.LongText
   goodtoknow    String?     @db.LongText
   highlights    String?     @db.LongText
-  mainImage     Media?      @relation("PackageMainImage", fields: [mainImageId], references: [id])
-  mainImageId   Int?
-  map           Media?      @relation("PackageMap", fields: [mapId], references: [id])
   mapId         Int?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
-  Booking       Booking[]
-  faqs          Faq[]
-  reviews       Review[]
-  seo           Seo?        @relation(fields: [seoId], references: [id])
   seoId         Int?        @unique
-  destination   Destination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
   destinationId Int
+  mainImageId   Int?
+  Booking       Booking[]
   comment       Comment[]
-  media         Media[]     @relation("mediaPackages")
+  faqs          Faq[]
+  destination   Destination @relation(fields: [destinationId], references: [id], onDelete: Cascade)
+  mainImage     Media?      @relation("PackageMainImage", fields: [mainImageId], references: [id])
+  map           Media?      @relation("PackageMap", fields: [mapId], references: [id])
+  seo           Seo?        @relation(fields: [seoId], references: [id])
+  reviews       Review[]
   wishlist      Wishlist[]
+  media         Media[]     @relation("mediaPackages")
+
+  @@index([destinationId], map: "Package_destinationId_fkey")
+  @@index([mainImageId], map: "Package_mainImageId_fkey")
+  @@index([mapId], map: "Package_mapId_fkey")
 }
 
 model Faq {
@@ -225,9 +237,11 @@ model Faq {
   question  String?
   answer    String?
   packageId Int?
-  package   Package? @relation(fields: [packageId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  package   Package? @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@index([packageId], map: "Faq_packageId_fkey")
 }
 
 model Booking {
@@ -259,12 +273,13 @@ model Booking {
   updatedAt        DateTime  @updatedAt
   package          Package   @relation(fields: [packageId], references: [id], onDelete: Cascade)
   payment          Payment?
+
+  @@index([packageId], map: "Booking_packageId_fkey")
 }
 
 model Payment {
   id             String   @id @default(cuid())
   bookingId      Int      @unique
-  booking        Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   status         String
   paymentMethod  String
   amount         Int
@@ -276,9 +291,11 @@ model Payment {
   paymentDate    DateTime @default(now()) @map("payment_date")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @default(now())
-  Media          Media?   @relation(fields: [mediaId], references: [id])
   mediaId        Int?
+  booking        Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  Media          Media?   @relation(fields: [mediaId], references: [id])
 
+  @@index([mediaId], map: "payment_mediaId_fkey")
   @@map("payment")
 }
 
@@ -290,8 +307,10 @@ model Team {
   twitter   String?
   linkedin  String?
   createdAt DateTime @default(now())
-  Media     Media?   @relation(fields: [mediaId], references: [id])
   mediaId   Int?
+  Media     Media?   @relation(fields: [mediaId], references: [id])
+
+  @@index([mediaId], map: "Team_mediaId_fkey")
 }
 
 model Mail {
@@ -302,8 +321,10 @@ model Mail {
   message   String?  @db.MediumText
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now())
-  Media     Media?   @relation(fields: [mediaId], references: [id])
   mediaId   Int?
+  Media     Media?   @relation(fields: [mediaId], references: [id])
+
+  @@index([mediaId], map: "Mail_mediaId_fkey")
 }
 
 model Author {
@@ -318,13 +339,14 @@ model Author {
   status      String   @default("active")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  blogs       Blog[]
-  media       Media?   @relation(fields: [mediaId], references: [id])
   mediaId     Int?
-  Seo         Seo?     @relation(fields: [seoId], references: [id])
   seoId       Int?     @unique
+  media       Media?   @relation(fields: [mediaId], references: [id])
+  Seo         Seo?     @relation(fields: [seoId], references: [id])
+  blogs       Blog[]
 
   @@unique([username, email])
+  @@index([mediaId], map: "Author_mediaId_fkey")
 }
 
 model Comment {
@@ -336,23 +358,40 @@ model Comment {
   isSpam     Boolean? @default(false)
   message    String?  @db.MediumText
   packageId  Int?
-  package    Package? @relation(fields: [packageId], references: [id], onDelete: Cascade)
   blogId     Int?
-  blog       Blog?    @relation(fields: [blogId], references: [id], onDelete: Cascade)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @default(now())
+  blog       Blog?    @relation(fields: [blogId], references: [id], onDelete: Cascade)
+  package    Package? @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@index([blogId], map: "Comment_blogId_fkey")
+  @@index([packageId], map: "Comment_packageId_fkey")
 }
 
 model Wishlist {
   id        Int      @id @default(autoincrement())
   userId    Int
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   packageId Int
-  package   Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
+  package   Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, packageId])
+  @@index([packageId], map: "wishlists_packageId_fkey")
   @@map("wishlists")
+}
+
+model Category {
+  id        Int      @id @default(autoincrement())
+  endpoint  String   @unique
+  content   String   @db.LongText
+  title     String?
+  slug      String?  @unique
+  isActive  Boolean  @default(true)
+  seoId     Int?     @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  seo       Seo?     @relation(fields: [seoId], references: [id])
 }
 
 enum Role {

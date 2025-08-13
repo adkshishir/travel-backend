@@ -18,6 +18,7 @@ import { FaqModule } from './faq/faq.module';
 import { BlogsModule } from './blogs/blogs.module';
 import { AuthorsModule } from './authors/authors.module';
 import { MailModule } from './mail/mail.module';
+import { CategoriesModule } from './categories/categories.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { MailModule } from './mail/mail.module';
       rootPath: join(__dirname, '..', 'uploads'),
       serveRoot: '/uploads',
     }),
+    CategoriesModule,
   ],
   controllers: [AppController],
   providers: [AppService, PrismaService],
