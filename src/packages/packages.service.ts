@@ -49,7 +49,7 @@ export class PackagesService {
               }
             : undefined,
         faqs: { createMany: { data: faqs } },
-        mainImage: mainImageId?{ connect: { id: mainImageId } }:undefined,
+        mainImage: mainImageId ? { connect: { id: mainImageId } } : undefined,
       };
 
       return responseHelper.success(
@@ -160,7 +160,10 @@ export class PackagesService {
   }
 
   async update(id: number, updateDto: UpdatePackageDto) {
-    const existing = await this.prisma.package.findUnique({ where: { id } });
+    const existing = await this.prisma.package.findUnique({ 
+      where: { id },
+      include: { media: true }
+    });
     const { destinationId, mediaIds, mainImageId, faqs, mapId, ...rest } =
       updateDto;
 
@@ -169,7 +172,11 @@ export class PackagesService {
         responseHelper.error(`Package with ID ${id} not found.`),
       );
     }
-
+     await this.prisma.media.deleteMany({
+      where:{
+        packageId:id
+      }
+     }) 
     const updated = await this.prisma.package.update({
       where: { id },
       data: {
@@ -178,13 +185,12 @@ export class PackagesService {
           ? { connect: { id: updateDto.destinationId } }
           : undefined,
         map: updateDto.mapId ? { connect: { id: updateDto.mapId } } : undefined,
-        media:
-          mediaIds.length > 0
-            ? {
-                connect: mediaIds?.map((m) => ({ id: m })),
-              }
-            : undefined,
-        mainImage:mainImageId? { connect: { id: mainImageId } }:undefined,
+        media: mediaIds?.length > 0
+          ? {
+              set: mediaIds?.map((m) => ({ id: m })),
+            }
+          : { set: [] },
+        mainImage: mainImageId ? { connect: { id: mainImageId } } : undefined,
         seo: {
           update: {
             ...updateDto.seo,
@@ -192,7 +198,7 @@ export class PackagesService {
           },
         },
         faqs:
-          faqs.length > 0
+          faqs?.length > 0
             ? {
                 deleteMany: {},
                 createMany: {
