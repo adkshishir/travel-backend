@@ -18,7 +18,6 @@ export class ActivitiesService {
         responseHelper.error('Activity already exist', null),
       );
     }
-    console.log(createActivityDto);
 
     try {
       const activity = await this.prisma.activity.create({
@@ -51,7 +50,6 @@ export class ActivitiesService {
       });
       return responseHelper.success('Activity created', activity);
     } catch (error) {
-      console.log(error);
       throw new HttpException(
         responseHelper.error('Activity not created', error.message),
         400,
