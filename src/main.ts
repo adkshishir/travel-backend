@@ -7,7 +7,7 @@ import * as bodyParser from 'body-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
+
   const corsOptions: CorsOptions = {
     origin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000'], // Allowed origins
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE', // Allowed methods
