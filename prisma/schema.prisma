@@ -258,7 +258,8 @@ model Booking {
   flightDeparture  String?
   otherInformation String?
   status           String    @default("pending")
-  paymentStatus    String    @default("pending")
+  paymentStatus    String    @default("unpaid")
+  paymentMethod    String?
   tripCode         String?
   type             String?
   totalPrice       Int?
@@ -269,6 +270,10 @@ model Booking {
   bookingDate      DateTime?
   howdidyouhear    String?
   prePayment       Float?
+  cancelReason     String?
+  cancelledAt      DateTime?
+  refundStatus     String?   @default("none")
+  refundAmount     Int?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   package          Package   @relation(fields: [packageId], references: [id], onDelete: Cascade)
@@ -278,22 +283,27 @@ model Booking {
 }
 
 model Payment {
-  id             String   @id @default(cuid())
-  bookingId      Int      @unique
+  id             String    @id @default(cuid())
+  bookingId      Int       @unique
   status         String
   paymentMethod  String
   amount         Int
-  currency       String?
+  currency       String?   @default("USD")
   transactionId  String?
   discountAmount Int?
   discountType   String?
   couponCode     String?
-  paymentDate    DateTime @default(now()) @map("payment_date")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @default(now())
+  paymentDate    DateTime  @default(now()) @map("payment_date")
+  refundId       String?
+  refundedAt     DateTime?
+  refundStatus   String?   @default("none")
+  refundAmount   Int?
+  failureReason  String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt @default(now())
   mediaId        Int?
-  booking        Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  Media          Media?   @relation(fields: [mediaId], references: [id])
+  booking        Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  Media          Media?    @relation(fields: [mediaId], references: [id])
 
   @@index([mediaId], map: "payment_mediaId_fkey")
   @@map("payment")

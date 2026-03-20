@@ -37,7 +37,8 @@
     "nodemailer": "^6.10.0",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.1",
-    "sharp": "^0.34.0"
+    "sharp": "^0.34.0",
+    "stripe": "^20.4.1"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",

@@ -6,7 +6,7 @@ import { CorsOptions } from '@nestjs/common/interfaces/external/cors-options.int
 import * as bodyParser from 'body-parser';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   const corsOptions: CorsOptions = {
     origin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000'], // Allowed origins

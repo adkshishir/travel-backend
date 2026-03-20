@@ -20,6 +20,7 @@ import { BlogsModule } from './blogs/blogs.module';
 import { AuthorsModule } from './authors/authors.module';
 import { MailModule } from './mail/mail.module';
 import { CategoriesModule } from './categories/categories.module';
+import { PaymentModule } from './payment/payment.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { CategoriesModule } from './categories/categories.module';
       serveRoot: '/uploads',
     }),
     CategoriesModule,
+    PaymentModule,
   ],
   controllers: [AppController],
   providers: [AppService, PrismaService],
