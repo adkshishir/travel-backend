@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, InternalServerErrorException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import responseHelper from 'src/utils/response-helper';
+import { PaginationDto } from 'src/utils/pagination.dto';
 
 @Injectable()
 export class BlogsService {
@@ -41,12 +42,28 @@ export class BlogsService {
     }
   }
 
-  async findAll() {
+  async findAll(paginationDto: PaginationDto) {
+    const { page = 1, limit = 10 } = paginationDto;
+    const skip = (page - 1) * limit;
+
     try {
-      const blogs = await this.prisma.blog.findMany({
-        include: { seo: true, media: true, author: true },
+      const [items, total] = await Promise.all([
+        this.prisma.blog.findMany({
+          skip,
+          take: limit,
+          include: { seo: true, media: true, author: true },
+          orderBy: { createdAt: 'desc' },
+        }),
+        this.prisma.blog.count(),
+      ]);
+
+      return responseHelper.success('All blogs', {
+        items,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
       });
-      return responseHelper.success('All blogs', blogs);
     } catch (error) {
       throw new InternalServerErrorException(
         responseHelper.error('Failed to retrieve blogs', error.message),

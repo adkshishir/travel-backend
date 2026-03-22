@@ -8,6 +8,7 @@ import { CreateDestinationDto } from './dto/create-destination.dto';
 import { UpdateDestinationDto } from './dto/update-destination.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import responseHelper from 'src/utils/response-helper';
+import { PaginationDto } from 'src/utils/pagination.dto';
 
 @Injectable()
 export class DestinationsService {
@@ -60,29 +61,45 @@ export class DestinationsService {
     }
   }
 
-  async findAll() {
-    const destinations = await this.prisma.destination.findMany({
-      include: {
-        activity: {
-          select: {
-            name: true,
-            slug: true,
+  async findAll(paginationDto: PaginationDto) {
+    const { page = 1, limit = 10 } = paginationDto;
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      this.prisma.destination.findMany({
+        skip,
+        take: limit,
+        include: {
+          activity: {
+            select: {
+              name: true,
+              slug: true,
+            },
+          },
+          media: {
+            select: {
+              thumbnail: true,
+              alt: true,
+            },
+          },
+          _count: {
+            select: {
+              packages: true,
+            },
           },
         },
-        media: {
-          select: {
-            thumbnail: true,
-            alt: true,
-          },
-        },
-        _count: {
-          select: {
-            packages: true,
-          },
-        },
-      },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.destination.count(),
+    ]);
+
+    return responseHelper.success('All destinations', {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
     });
-    return responseHelper.success('All destinations', destinations);
   }
 
   async findOne(slug: string) {

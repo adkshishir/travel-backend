@@ -3,6 +3,7 @@ import { CreateReviewDto } from './dto/create-review.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import responseHelper from 'src/utils/response-helper';
+import { PaginationDto } from 'src/utils/pagination.dto';
 
 @Injectable()
 export class ReviewsService {
@@ -22,19 +23,35 @@ export class ReviewsService {
     }
   }
 
-  async findAll() {
+  async findAll(paginationDto: PaginationDto) {
+    const { page = 1, limit = 10 } = paginationDto;
+    const skip = (page - 1) * limit;
+
     try {
-      const reviews = await this.prisma.review.findMany({
-        include: {
-          media: {
-            select: {
-              thumbnail: true,
-              alt: true,
+      const [items, total] = await Promise.all([
+        this.prisma.review.findMany({
+          skip,
+          take: limit,
+          include: {
+            media: {
+              select: {
+                thumbnail: true,
+                alt: true,
+              },
             },
           },
-        },
+          orderBy: { createdAt: 'desc' },
+        }),
+        this.prisma.review.count(),
+      ]);
+
+      return responseHelper.success('All reviews', {
+        items,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
       });
-      return responseHelper.success('All reviews', reviews);
     } catch (error) {
       throw new InternalServerErrorException(
         responseHelper.error('Failed to retrieve reviews', error.message),

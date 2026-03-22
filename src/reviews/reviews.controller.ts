@@ -6,10 +6,12 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
 } from '@nestjs/common';
 import { ReviewsService } from './reviews.service';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
+import { PaginationDto } from 'src/utils/pagination.dto';
 
 @Controller('api/reviews')
 export class ReviewsController {
@@ -21,8 +23,8 @@ export class ReviewsController {
   }
 
   @Get()
-  findAll() {
-    return this.reviewsService.findAll();
+  findAll(@Query() paginationDto: PaginationDto) {
+    return this.reviewsService.findAll(paginationDto);
   }
 
   @Get(':id')

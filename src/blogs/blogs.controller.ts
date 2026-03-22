@@ -1,9 +1,10 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Query } from '@nestjs/common';
 import { BlogsService } from './blogs.service';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CreateBlogDto } from './dto/create-blog.dto';
 import { UpdateBlogDto } from './dto/update-blog.dto';
 import { AuthGuard } from '../auth/auth.guard';
+import { PaginationDto } from 'src/utils/pagination.dto';
 
 @ApiTags('Blogs')
 @Controller('api/blogs')
@@ -20,8 +21,8 @@ export class BlogsController {
 
   @Get()
   @ApiOperation({ summary: 'Get all blogs' })
-  findAll() {
-    return this.blogsService.findAll();
+  findAll(@Query() paginationDto: PaginationDto) {
+    return this.blogsService.findAll(paginationDto);
   }
 
   @Get(':slug')

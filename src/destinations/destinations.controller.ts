@@ -7,12 +7,14 @@ import {
   Param,
   Delete,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { DestinationsService } from './destinations.service';
 import { CreateDestinationDto } from './dto/create-destination.dto';
 import { UpdateDestinationDto } from './dto/update-destination.dto';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from 'src/auth/auth.guard';
+import { PaginationDto } from 'src/utils/pagination.dto';
 
 @Controller('api/destinations')
 @ApiTags('Destinations')
@@ -27,8 +29,8 @@ export class DestinationsController {
   }
 
   @Get()
-  findAll() {
-    return this.destinationsService.findAll();
+  findAll(@Query() paginationDto: PaginationDto) {
+    return this.destinationsService.findAll(paginationDto);
   }
   @Get('top')
   findTopDestinations() {

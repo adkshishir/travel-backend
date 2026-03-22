@@ -3,6 +3,7 @@ import { CreateCarouselDto } from './dto/create-carousel.dto';
 import { UpdateCarouselDto } from './dto/update-carousel.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import responseHelper from 'src/utils/response-helper';
+import { PaginationDto } from 'src/utils/pagination.dto';
 
 @Injectable()
 export class CarouselsService {
@@ -33,12 +34,30 @@ export class CarouselsService {
     }
   }
 
-  async findAll() {
-    const carousels = await this.prisma.carousel.findMany();
-    if (!carousels.length) {
+  async findAll(paginationDto: PaginationDto) {
+    const { page = 1, limit = 10 } = paginationDto;
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      this.prisma.carousel.findMany({
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.carousel.count(),
+    ]);
+
+    if (!items.length) {
       throw new NotFoundException('No carousels found');
     }
-    return responseHelper.success('All carousels', carousels);
+
+    return responseHelper.success('All carousels', {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    });
   }
 
   async findByPage(page: string) {

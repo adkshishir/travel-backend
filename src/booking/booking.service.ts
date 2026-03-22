@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingDto } from './dto/update-booking.dto';
 import responseHelper from 'src/utils/response-helper';
+import { PaginationDto } from 'src/utils/pagination.dto';
 
 @Injectable()
 export class BookingService {
@@ -21,40 +22,55 @@ export class BookingService {
     }
   }
 
-  async findAll() {
+  async findAll(paginationDto: PaginationDto) {
+    const { page = 1, limit = 10 } = paginationDto;
+    const skip = (page - 1) * limit;
+
     try {
-      const bookings = await this.prisma.booking.findMany({
-        include: {
-          package: {
-            select: {
-              id: true,
-              title: true,
-              slug: true,
-              price: true,
-              destination: {
-                select: {
-                  id: true,
-                  name: true,
-                  slug: true,
-                  activity: {
-                    select: {
-                      id: true,
-                      name: true,
-                      slug: true,
+      const [items, total] = await Promise.all([
+        this.prisma.booking.findMany({
+          skip,
+          take: limit,
+          include: {
+            package: {
+              select: {
+                id: true,
+                title: true,
+                slug: true,
+                price: true,
+                destination: {
+                  select: {
+                    id: true,
+                    name: true,
+                    slug: true,
+                    activity: {
+                      select: {
+                        id: true,
+                        name: true,
+                        slug: true,
+                      }
                     }
                   }
                 }
               }
             }
+          },
+          orderBy: {
+            createdAt: 'desc'
           }
-        },
-        orderBy: {
-          createdAt: 'desc'
-        }
-      });
+        }),
+        this.prisma.booking.count(),
+      ]);
+
       return responseHelper.success(
         'All bookings retrieved successfully',
-        bookings,
+        {
+          items,
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        },
       );
     } catch (error) {
       throw new InternalServerErrorException(

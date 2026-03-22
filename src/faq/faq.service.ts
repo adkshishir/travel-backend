@@ -3,6 +3,7 @@ import { CreateFaqDto } from './dto/create-faq.dto';
 import { UpdateFaqDto } from './dto/update-faq.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import responseHelper from 'src/utils/response-helper';
+import { PaginationDto } from 'src/utils/pagination.dto';
 
 @Injectable()
 export class FaqService {
@@ -17,17 +18,34 @@ export class FaqService {
     return responseHelper.success('Faq created successfully', faq);
   }
 
-  async findAll() {
-    const faqs = await this.prisma.faq.findMany({
-      // find that doesnot have packageId
-      where: {
-        packageId: null,
-      },
-    });
-    if (!faqs.length) {
+  async findAll(paginationDto: PaginationDto) {
+    const { page = 1, limit = 10 } = paginationDto;
+    const skip = (page - 1) * limit;
+
+    const where = { packageId: null };
+
+    const [items, total] = await Promise.all([
+      this.prisma.faq.findMany({
+        skip,
+        take: limit,
+        // find that doesnot have packageId
+        where,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.faq.count({ where }),
+    ]);
+
+    if (!items.length) {
       throw new NotFoundException(responseHelper.error('No data found', null));
     }
-    return responseHelper.success('All faqs', faqs);
+
+    return responseHelper.success('All faqs', {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    });
   }
 
   async findOne(id: number) {

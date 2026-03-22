@@ -7,12 +7,14 @@ import {
   Param,
   Delete,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { AuthorsService } from './authors.service';
 import { CreateAuthorDto } from './dto/create-author.dto';
 import { UpdateAuthorDto } from './dto/update-author.dto';
 import { ApiBearerAuth, ApiTags, ApiOperation } from '@nestjs/swagger';
 import { AuthGuard } from '../auth/auth.guard';
+import { PaginationDto } from 'src/utils/pagination.dto';
 
 @ApiTags('Authors')
 @Controller('api/authors')
@@ -29,8 +31,8 @@ export class AuthorsController {
 
   @Get()
   @ApiOperation({ summary: 'Get all authors' })
-  findAll() {
-    return this.authorsService.findAll();
+  findAll(@Query() paginationDto: PaginationDto) {
+    return this.authorsService.findAll(paginationDto);
   }
 
   @Get(':id')

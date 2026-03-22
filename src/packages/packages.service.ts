@@ -7,7 +7,9 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePackageDto } from './dto/create-package.dto';
 import { UpdatePackageDto } from './dto/update-package.dto';
+import { FilterPackageDto } from './dto/filter-package.dto';
 import responseHelper from 'src/utils/response-helper';
+import { PaginationDto } from 'src/utils/pagination.dto';
 
 @Injectable()
 export class PackagesService {
@@ -63,37 +65,117 @@ export class PackagesService {
     }
   }
 
-  async findAll() {
-    const data = await this.prisma.package.findMany({
-      select: {
-        id: true,
-        title: true,
-        slug: true,
-        description: true,
-        duration: true,
-        price: true,
-        groupSize: true,
-        media: {
-          select: {
-            thumbnail: true,
-            alt: true,
-          },
+  async search(filterDto: FilterPackageDto, paginationDto: PaginationDto) {
+    const { page = 1, limit = 10 } = paginationDto;
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+
+    if (filterDto.search) {
+      where.OR = [
+        { title: { contains: filterDto.search } },
+        { description: { contains: filterDto.search } },
+      ];
+    }
+
+    if (filterDto.destinationId) {
+      where.destinationId = filterDto.destinationId;
+    }
+
+    if (filterDto.bestSeason) {
+      where.bestSeason = { contains: filterDto.bestSeason };
+    }
+
+    if (filterDto.activity) {
+      where.activity = { contains: filterDto.activity };
+    }
+
+    if (filterDto.minPrice || filterDto.maxPrice) {
+      // price is stored as string, so we need to handle this carefully
+      // We'll filter in-memory after query if price filtering is needed
+    }
+
+    const orderBy: any = {};
+    if (filterDto.sortBy) {
+      const validSortFields = ['rating', 'createdAt', 'title'];
+      if (validSortFields.includes(filterDto.sortBy)) {
+        orderBy[filterDto.sortBy] = filterDto.sortOrder || 'desc';
+      }
+    } else {
+      orderBy.createdAt = 'desc';
+    }
+
+    const [items, total] = await Promise.all([
+      this.prisma.package.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy,
+        include: {
+          mainImage: true,
+          destination: true,
+          reviews: true,
         },
-        destination: {
-          select: {
-            name: true,
-            slug: true,
-            activity: {
-              select: {
-                name: true,
-                slug: true,
+      }),
+      this.prisma.package.count({ where }),
+    ]);
+
+    return responseHelper.success('Packages fetched successfully', {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    });
+  }
+
+  async findAll(paginationDto: PaginationDto) {
+    const { page = 1, limit = 10 } = paginationDto;
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      this.prisma.package.findMany({
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+          description: true,
+          duration: true,
+          price: true,
+          groupSize: true,
+          media: {
+            select: {
+              thumbnail: true,
+              alt: true,
+            },
+          },
+          destination: {
+            select: {
+              name: true,
+              slug: true,
+              activity: {
+                select: {
+                  name: true,
+                  slug: true,
+                },
               },
             },
           },
         },
-      },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.package.count(),
+    ]);
+
+    return responseHelper.success('All packages', {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
     });
-    return responseHelper.success('All packages', data);
   }
 
   async findOne(slug: string) {

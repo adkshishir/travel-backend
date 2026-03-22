@@ -1,7 +1,8 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
 import { FaqService } from './faq.service';
 import { CreateFaqDto } from './dto/create-faq.dto';
 import { UpdateFaqDto } from './dto/update-faq.dto';
+import { PaginationDto } from 'src/utils/pagination.dto';
 
 @Controller('api/faqs')
 export class FaqController {
@@ -13,8 +14,8 @@ export class FaqController {
   }
 
   @Get()
-  findAll() {
-    return this.faqService.findAll();
+  findAll(@Query() paginationDto: PaginationDto) {
+    return this.faqService.findAll(paginationDto);
   }
 
   @Get(':id')

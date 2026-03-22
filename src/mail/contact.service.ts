@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 import responseHelper from 'src/utils/response-helper';
+import { PaginationDto } from 'src/utils/pagination.dto';
 
 @Injectable()
 export class ContactService {
@@ -21,26 +22,41 @@ export class ContactService {
     }
   }
 
-  async findAll() {
+  async findAll(paginationDto: PaginationDto) {
+    const { page = 1, limit = 10 } = paginationDto;
+    const skip = (page - 1) * limit;
+
     try {
-      const mails = await this.prisma.mail.findMany({
-        include: {
-          Media: {
-            select: {
-              id: true,
-              thumbnail: true,
-              original: true,
-              alt: true,
+      const [items, total] = await Promise.all([
+        this.prisma.mail.findMany({
+          skip,
+          take: limit,
+          include: {
+            Media: {
+              select: {
+                id: true,
+                thumbnail: true,
+                original: true,
+                alt: true,
+              }
             }
+          },
+          orderBy: {
+            createdAt: 'desc'
           }
-        },
-        orderBy: {
-          createdAt: 'desc'
-        }
-      });
+        }),
+        this.prisma.mail.count(),
+      ]);
+
       return responseHelper.success(
         'All contact messages retrieved successfully',
-        mails,
+        {
+          items,
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        },
       );
     } catch (error) {
       throw new InternalServerErrorException(

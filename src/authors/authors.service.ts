@@ -8,6 +8,7 @@ import { CreateAuthorDto } from './dto/create-author.dto';
 import { UpdateAuthorDto } from './dto/update-author.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import responseHelper from 'src/utils/response-helper';
+import { PaginationDto } from 'src/utils/pagination.dto';
 
 @Injectable()
 export class AuthorsService {
@@ -74,19 +75,35 @@ export class AuthorsService {
     }
   }
 
-  async findAll() {
-    const authors = await this.prisma.author.findMany({
-      include: {
-        media: true,
-      },
-    });
-    if (!authors.length) {
+  async findAll(paginationDto: PaginationDto) {
+    const { page = 1, limit = 10 } = paginationDto;
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      this.prisma.author.findMany({
+        skip,
+        take: limit,
+        include: {
+          media: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.author.count(),
+    ]);
+
+    if (!items.length) {
       throw new NotFoundException(
         responseHelper.error('No authors found', null),
       );
     }
 
-    return responseHelper.success('All authors', authors);
+    return responseHelper.success('All authors', {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    });
   }
 
   async findOne(id: number) {

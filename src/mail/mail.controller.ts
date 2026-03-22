@@ -6,11 +6,13 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
 } from '@nestjs/common';
 import { ContactService } from './contact.service';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { PaginationDto } from 'src/utils/pagination.dto';
 
 @ApiTags('Contact Messages')
 @Controller('api/mail')
@@ -28,8 +30,8 @@ export class MailController {
   @Get()
   @ApiOperation({ summary: 'Get all contact messages' })
   @ApiResponse({ status: 200, description: 'All contact messages retrieved successfully' })
-  findAll() {
-    return this.contactService.findAll();
+  findAll(@Query() paginationDto: PaginationDto) {
+    return this.contactService.findAll(paginationDto);
   }
 
   @Get(':id')

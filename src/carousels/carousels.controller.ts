@@ -7,12 +7,14 @@ import {
   Param,
   Delete,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { CarouselsService } from './carousels.service';
 import { CreateCarouselDto } from './dto/create-carousel.dto';
 import { UpdateCarouselDto } from './dto/update-carousel.dto';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from 'src/auth/auth.guard';
+import { PaginationDto } from 'src/utils/pagination.dto';
 
 @ApiTags('carousels')
 @Controller('api/carousels')
@@ -26,8 +28,8 @@ export class CarouselsController {
   }
 
   @Get()
-  findAll() {
-    return this.carouselsService.findAll();
+  findAll(@Query() paginationDto: PaginationDto) {
+    return this.carouselsService.findAll(paginationDto);
   }
 
   @Get(':page')

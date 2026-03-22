@@ -6,10 +6,12 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
 } from '@nestjs/common';
 import { BookingService } from './booking.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingDto } from './dto/update-booking.dto';
+import { PaginationDto } from 'src/utils/pagination.dto';
 
 @Controller('api/booking')
 export class BookingController {
@@ -21,8 +23,8 @@ export class BookingController {
   }
 
   @Get()
-  findAll() {
-    return this.bookingService.findAll();
+  findAll(@Query() paginationDto: PaginationDto) {
+    return this.bookingService.findAll(paginationDto);
   }
 
   @Get(':id')

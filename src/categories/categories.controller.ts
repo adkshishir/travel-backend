@@ -7,12 +7,14 @@ import {
   Param,
   Delete,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from 'src/auth/auth.guard';
+import { PaginationDto } from 'src/utils/pagination.dto';
 
 @Controller('api/categories')
 @ApiTags('categories')
@@ -27,8 +29,8 @@ export class CategoriesController {
   }
 
   @Get()
-  findAll() {
-    return this.categoriesService.findAll();
+  findAll(@Query() paginationDto: PaginationDto) {
+    return this.categoriesService.findAll(paginationDto);
   }
 
   @Get(':identifier')

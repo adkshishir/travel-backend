@@ -6,10 +6,13 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { CreatePackageDto } from './dto/create-package.dto';
 import { UpdatePackageDto } from './dto/update-package.dto';
+import { FilterPackageDto } from './dto/filter-package.dto';
+import { PaginationDto } from 'src/utils/pagination.dto';
 import { PackagesService } from './packages.service';
 import { ApiBearerAuth } from '@nestjs/swagger';
 import { AuthGuard } from 'src/auth/auth.guard';
@@ -25,8 +28,13 @@ export class PackagesController {
   }
 
   @Get()
-  findAll() {
-    return this.packagesService.findAll();
+  findAll(@Query() paginationDto: PaginationDto) {
+    return this.packagesService.findAll(paginationDto);
+  }
+
+  @Get('search')
+  search(@Query() filterDto: FilterPackageDto, @Query() paginationDto: PaginationDto) {
+    return this.packagesService.search(filterDto, paginationDto);
   }
 
   @Get(':slug')

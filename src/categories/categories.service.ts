@@ -3,6 +3,7 @@ import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import responseHelper from 'src/utils/response-helper';
+import { PaginationDto } from 'src/utils/pagination.dto';
 
 @Injectable()
 export class CategoriesService {
@@ -52,20 +53,35 @@ export class CategoriesService {
     }
   }
 
-  async findAll() {
-    const categories = await this.prisma.category.findMany({
-      include: {
-        seo: {
-          include: {
-            media: true,
+  async findAll(paginationDto: PaginationDto) {
+    const { page = 1, limit = 10 } = paginationDto;
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      this.prisma.category.findMany({
+        skip,
+        take: limit,
+        include: {
+          seo: {
+            include: {
+              media: true,
+            },
           },
         },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      }),
+      this.prisma.category.count(),
+    ]);
+
+    return responseHelper.success('All categories', {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
     });
-    return responseHelper.success('All categories', categories);
   }
 
   async findOne(identifier: string) {
