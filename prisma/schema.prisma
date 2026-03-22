@@ -83,8 +83,9 @@ model User {
   country    String?
   phone      String?
   isVerified Boolean?
-  otp        String?
-  createdAt  DateTime   @default(now())
+  otp          String?
+  otpExpiresAt DateTime?
+  createdAt    DateTime   @default(now())
   updatedAt  DateTime   @default(now())
   wishlists  Wishlist[]
 }
@@ -154,7 +155,7 @@ model Seo {
 model Activity {
   id           Int           @id @default(autoincrement())
   name         String?
-  description  String?
+  description  String?       @db.MediumText
   slug         String?       @unique
   createdAt    DateTime      @default(now())
   seoId        Int?          @unique
@@ -170,7 +171,7 @@ model Destination {
   id          Int       @id @default(autoincrement())
   name        String?
   slug        String?   @unique
-  description String?
+  description String?   @db.MediumText
   activityId  Int
   createdAt   DateTime  @default(now())
   seoId       Int?      @unique
@@ -234,8 +235,8 @@ model Package {
 
 model Faq {
   id        Int      @id @default(autoincrement())
-  question  String?
-  answer    String?
+  question  String?  @db.MediumText
+  answer    String?  @db.MediumText
   packageId Int?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -342,7 +343,7 @@ model Author {
   name        String
   username    String
   email       String   @unique
-  bio         String?
+  bio         String?  @db.MediumText
   socialLinks Json?
   website     String?
   role        String   @default("author")
