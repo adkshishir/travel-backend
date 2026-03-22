@@ -4,17 +4,22 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { CorsOptions } from '@nestjs/common/interfaces/external/cors-options.interface';
 import * as bodyParser from 'body-parser';
+import helmet from 'helmet';
+import { SanitizePipe } from './utils/sanitize.pipe';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
 
+  // Security headers
+  app.use(helmet());
+
   const corsOptions: CorsOptions = {
-    origin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000'], // Allowed origins
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE', // Allowed methods
-    credentials: true, // Allow cookies to be sent
+    origin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000'],
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    credentials: true,
   };
-  app.use(bodyParser.json({ limit: '50mb' })); // Adjust the limit as needed
-  app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
+  app.use(bodyParser.json({ limit: '5mb' }));
+  app.use(bodyParser.urlencoded({ limit: '5mb', extended: true }));
   app.enableCors(corsOptions);
   const config = new DocumentBuilder()
     .setTitle('Poon Hill Api')
@@ -23,6 +28,7 @@ async function bootstrap() {
     .addBearerAuth()
     .build();
 
+  app.useGlobalPipes(new SanitizePipe());
   app.useGlobalPipes(
     new ValidationPipe({
       transform: true,

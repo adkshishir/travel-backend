@@ -7,12 +7,14 @@ import {
   Param,
   Delete,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { ActivitiesService } from './activities.service';
 import { CreateActivityDto } from './dto/create-activity.dto';
 import { UpdateActivityDto } from './dto/update-activity.dto';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from 'src/auth/auth.guard';
+import { PaginationDto } from 'src/utils/pagination.dto';
 
 @Controller('api/activities')
 @ApiTags('activities')
@@ -28,8 +30,8 @@ export class ActivitiesController {
   }
 
   @Get()
-  findAll() {
-    return this.activitiesService.findAll();
+  findAll(@Query() paginationDto: PaginationDto) {
+    return this.activitiesService.findAll(paginationDto);
   }
   @Get('nav-items')
   navItems() {

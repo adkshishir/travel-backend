@@ -27,10 +27,12 @@ export class AuthService {
     });
     if (!user) {
       const verifyOtp = Math.floor(100000 + Math.random() * 900000);
+      const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
       await this.prisma.user.create({
         data: {
           email: registerDto.email,
           otp: verifyOtp.toString(),
+          otpExpiresAt,
           role: 'USER',
         },
       });
@@ -54,13 +56,14 @@ export class AuthService {
     }
 
     const verifyOtp = Math.floor(100000 + Math.random() * 900000);
+    const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
     await this.prisma.user.update({
       where: {
         email: registerDto.email,
       },
       data: {
         otp: verifyOtp.toString(),
-        // role: 'USER',
+        otpExpiresAt,
       },
     });
     const emailText = `Your OTP is ${verifyOtp}`;
@@ -96,10 +99,16 @@ export class AuthService {
         }),
       );
     }
-    if (
-      existUser.otp === verifyRegisterDto.otp ||
-      verifyRegisterDto.otp == '909090'
-    ) {
+    // Check OTP expiration (10 minutes)
+    if (existUser.otpExpiresAt && existUser.otpExpiresAt < new Date()) {
+      throw new BadRequestException(
+        responseHelper.error('OTP has expired. Please request a new one.', {
+          otp: ['OTP has expired'],
+        }),
+      );
+    }
+
+    if (existUser.otp === verifyRegisterDto.otp) {
       const token = this.jwtService.sign(existUser, {
         secret: process.env.JWT_SECRET,
       });
@@ -109,6 +118,7 @@ export class AuthService {
         },
         data: {
           otp: null,
+          otpExpiresAt: null,
         },
         select: {
           id: true,

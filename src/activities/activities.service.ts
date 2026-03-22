@@ -3,6 +3,7 @@ import { CreateActivityDto } from './dto/create-activity.dto';
 import { UpdateActivityDto } from './dto/update-activity.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import responseHelper from 'src/utils/response-helper';
+import { PaginationDto } from 'src/utils/pagination.dto';
 
 @Injectable()
 export class ActivitiesService {
@@ -79,20 +80,36 @@ export class ActivitiesService {
     return responseHelper.success('All activities', activities);
   }
 
-  async findAll() {
-    const activities = await this.prisma.activity.findMany({
-      // for update activites seos
-      include: {
-        _count: true,
-        media: {
-          select: {
-            thumbnail: true,
-            alt: true,
+  async findAll(paginationDto: PaginationDto) {
+    const { page = 1, limit = 10 } = paginationDto;
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      this.prisma.activity.findMany({
+        skip,
+        take: limit,
+        // for update activites seos
+        include: {
+          _count: true,
+          media: {
+            select: {
+              thumbnail: true,
+              alt: true,
+            },
           },
         },
-      },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.activity.count(),
+    ]);
+
+    return responseHelper.success('All activities', {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
     });
-    return responseHelper.success('All activities', activities);
   }
 
   async findOne(slug: string) {
