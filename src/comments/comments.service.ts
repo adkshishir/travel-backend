@@ -1,10 +1,39 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import responseHelper from 'src/utils/response-helper';
+import { CreateCommentDto } from './dto/create-comment.dto';
 
 @Injectable()
 export class CommentsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async create(dto: CreateCommentDto) {
+    const comment = await this.prisma.comment.create({
+      data: {
+        name: dto.name,
+        email: dto.email,
+        message: dto.message,
+        blogId: dto.blogId,
+        packageId: dto.packageId,
+        isApproved: false,
+        isSpam: false,
+      },
+    });
+    return responseHelper.success('Comment submitted and awaiting moderation', comment);
+  }
+
+  async findApproved(blogId?: number, packageId?: number) {
+    const where: any = { isApproved: true, isSpam: false };
+    if (blogId) where.blogId = blogId;
+    if (packageId) where.packageId = packageId;
+
+    const comments = await this.prisma.comment.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, name: true, message: true, createdAt: true },
+    });
+    return responseHelper.success('Approved comments fetched', comments);
+  }
 
   async findAll(page = 1, limit = 10, filter?: string) {
     const skip = (page - 1) * limit;

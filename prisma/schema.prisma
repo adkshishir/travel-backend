@@ -405,6 +405,14 @@ model Category {
   seo       Seo?     @relation(fields: [seoId], references: [id])
 }
 
+model Newsletter {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  name      String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
 enum Role {
   USER
   ADMIN

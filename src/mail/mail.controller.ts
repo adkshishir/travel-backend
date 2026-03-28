@@ -7,12 +7,14 @@ import {
   Param,
   Delete,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { ContactService } from './contact.service';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { PaginationDto } from 'src/utils/pagination.dto';
+import { AuthGuard } from 'src/auth/auth.guard';
 
 @ApiTags('Contact Messages')
 @Controller('api/mail')
@@ -27,6 +29,8 @@ export class MailController {
     return this.contactService.create(createContactDto);
   }
 
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard)
   @Get()
   @ApiOperation({ summary: 'Get all contact messages' })
   @ApiResponse({ status: 200, description: 'All contact messages retrieved successfully' })
@@ -34,6 +38,8 @@ export class MailController {
     return this.contactService.findAll(paginationDto);
   }
 
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard)
   @Get(':id')
   @ApiOperation({ summary: 'Get a specific contact message by ID' })
   @ApiResponse({ status: 200, description: 'Contact message retrieved successfully' })
@@ -42,6 +48,8 @@ export class MailController {
     return this.contactService.findOne(+id);
   }
 
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard)
   @Patch(':id')
   @ApiOperation({ summary: 'Update a contact message' })
   @ApiResponse({ status: 200, description: 'Contact message updated successfully' })
@@ -50,6 +58,8 @@ export class MailController {
     return this.contactService.update(+id, updateContactDto);
   }
 
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard)
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a contact message' })
   @ApiResponse({ status: 200, description: 'Contact message deleted successfully' })
@@ -57,4 +67,4 @@ export class MailController {
   remove(@Param('id') id: string) {
     return this.contactService.remove(+id);
   }
-} 
+}

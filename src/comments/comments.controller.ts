@@ -1,5 +1,17 @@
-import { Controller, Get, Patch, Delete, Param, Query, UseGuards, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Query,
+  UseGuards,
+  ParseIntPipe,
+} from '@nestjs/common';
 import { CommentsService } from './comments.service';
+import { CreateCommentDto } from './dto/create-comment.dto';
 import { AuthGuard } from 'src/auth/auth.guard';
 import { ApiBearerAuth, ApiQuery, ApiTags } from '@nestjs/swagger';
 
@@ -7,6 +19,24 @@ import { ApiBearerAuth, ApiQuery, ApiTags } from '@nestjs/swagger';
 @Controller('api/comments')
 export class CommentsController {
   constructor(private readonly commentsService: CommentsService) {}
+
+  @Post()
+  create(@Body() createCommentDto: CreateCommentDto) {
+    return this.commentsService.create(createCommentDto);
+  }
+
+  @Get('approved')
+  @ApiQuery({ name: 'blogId', required: false })
+  @ApiQuery({ name: 'packageId', required: false })
+  findApproved(
+    @Query('blogId') blogId?: string,
+    @Query('packageId') packageId?: string,
+  ) {
+    return this.commentsService.findApproved(
+      blogId ? parseInt(blogId) : undefined,
+      packageId ? parseInt(packageId) : undefined,
+    );
+  }
 
   @Get()
   @UseGuards(AuthGuard)

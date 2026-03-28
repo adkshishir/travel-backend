@@ -24,6 +24,10 @@ import { MailModule } from './mail/mail.module';
 import { CategoriesModule } from './categories/categories.module';
 import { PaymentModule } from './payment/payment.module';
 import { CommentsModule } from './comments/comments.module';
+import { SeoModule } from './seo/seo.module';
+import { WishlistModule } from './wishlist/wishlist.module';
+import { TeamModule } from './team/team.module';
+import { NewsletterModule } from './newsletter/newsletter.module';
 
 @Module({
   imports: [
@@ -66,6 +70,10 @@ import { CommentsModule } from './comments/comments.module';
     CategoriesModule,
     PaymentModule,
     CommentsModule,
+    SeoModule,
+    WishlistModule,
+    TeamModule,
+    NewsletterModule,
   ],
   controllers: [AppController],
   providers: [
