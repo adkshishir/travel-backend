@@ -1,6 +1,0 @@
--- AlterTable
-ALTER TABLE `Author` MODIFY `bio` MEDIUMTEXT NULL;
-
--- AlterTable
-ALTER TABLE `Faq` MODIFY `question` MEDIUMTEXT NULL,
-    MODIFY `answer` MEDIUMTEXT NULL;
