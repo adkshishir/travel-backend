@@ -1,11 +1,13 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { WishlistService } from './wishlist.service';
 import { WishlistController } from './wishlist.controller';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { JwtService } from '@nestjs/jwt';
+import { Wishlist } from 'src/database/entities/wishlist.entity';
+import { AuthModule } from 'src/auth/auth.module';
 
 @Module({
+  imports: [AuthModule, TypeOrmModule.forFeature([Wishlist])],
   controllers: [WishlistController],
-  providers: [WishlistService, PrismaService, JwtService],
+  providers: [WishlistService],
 })
 export class WishlistModule {}

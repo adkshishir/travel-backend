@@ -4,22 +4,47 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Brackets, DataSource, Repository } from 'typeorm';
 import { CreatePackageDto } from './dto/create-package.dto';
 import { UpdatePackageDto } from './dto/update-package.dto';
 import { FilterPackageDto } from './dto/filter-package.dto';
 import responseHelper from 'src/utils/response-helper';
 import { PaginationDto } from 'src/utils/pagination.dto';
+import { Package } from 'src/database/entities/package.entity';
+import { Media } from 'src/database/entities/media.entity';
+import { Seo } from 'src/database/entities/seo.entity';
+import { Faq } from 'src/database/entities/faq.entity';
+
+const PKG_LIST_RELATIONS = ['mainImage', 'destination', 'reviews'] as const;
+const PKG_DETAIL_RELATIONS = [
+  'destination',
+  'destination.activity',
+  'map',
+  'seo',
+  'seo.media',
+  'mainImage',
+  'media',
+  'faqs',
+] as const;
 
 @Injectable()
 export class PackagesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @InjectRepository(Package)
+    private readonly packageRepo: Repository<Package>,
+    @InjectRepository(Media)
+    private readonly mediaRepo: Repository<Media>,
+    @InjectRepository(Seo)
+    private readonly seoRepo: Repository<Seo>,
+    @InjectRepository(Faq)
+    private readonly faqRepo: Repository<Faq>,
+    private readonly dataSource: DataSource,
+  ) {}
 
   async create(createPackageDto: CreatePackageDto) {
-    const exist = await this.prisma.package.findUnique({
-      where: {
-        slug: createPackageDto.slug,
-      },
+    const exist = await this.packageRepo.findOne({
+      where: { slug: createPackageDto.slug },
     });
     if (exist) {
       throw new BadRequestException(
@@ -29,35 +54,60 @@ export class PackagesService {
       );
     }
     try {
-      const { destinationId, mediaIds, mainImageId, faqs, mapId, ...rest } =
-        createPackageDto;
-      const pkgData = {
-        ...rest,
-        destination: destinationId
-          ? { connect: { id: destinationId } }
-          : undefined,
-        map: mapId ? { connect: { id: mapId } } : undefined,
+      return await this.dataSource.transaction(async (mgr) => {
+        const {
+          destinationId,
+          mediaIds,
+          mainImageId,
+          faqs,
+          mapId,
+          seo: seoDto,
+          ...rest
+        } = createPackageDto;
 
-        seo: {
-          create: {
-            ...createPackageDto.seo,
-            mediaId: createPackageDto.seo?.mediaId || undefined,
-          },
-        },
-        media:
-          mediaIds?.length > 0
-            ? {
-                connect: mediaIds?.map((m) => ({ id: m })),
-              }
-            : undefined,
-        faqs: { createMany: { data: faqs } },
-        mainImage: mainImageId ? { connect: { id: mainImageId } } : undefined,
-      };
+        const seo = mgr.create(Seo, {
+          metaTitle: seoDto?.metaTitle ?? null,
+          metaDescription: seoDto?.metaDescription ?? null,
+          metaKeywords: seoDto?.metaKeywords ?? null,
+          metaCanonical: seoDto?.metaCanonical ?? null,
+          schema: seoDto?.schema ?? null,
+          mediaId: seoDto?.mediaId ?? null,
+        });
+        await mgr.save(seo);
 
-      return responseHelper.success(
-        'Package created successfully',
-        await this.prisma.package.create({ data: pkgData }),
-      );
+        const pkg = mgr.create(Package, {
+          ...rest,
+          destinationId,
+          mapId: mapId ?? null,
+          mainImageId: mainImageId ?? null,
+          seoId: seo.id,
+        });
+        await mgr.save(pkg);
+
+        if (mediaIds?.length) {
+          await mgr
+            .createQueryBuilder()
+            .relation(Package, 'media')
+            .of(pkg.id)
+            .add(mediaIds);
+        }
+        if (faqs?.length) {
+          await mgr.insert(
+            Faq,
+            faqs.map((f) => ({
+              question: f.question,
+              answer: f.answer,
+              packageId: pkg.id,
+            })),
+          );
+        }
+
+        const full = await mgr.findOne(Package, {
+          where: { id: pkg.id },
+          relations: [...PKG_DETAIL_RELATIONS, 'reviews'],
+        });
+        return responseHelper.success('Package created successfully', full);
+      });
     } catch (error) {
       throw new InternalServerErrorException(
         responseHelper.error("Package can't be created", error.message),
@@ -69,55 +119,65 @@ export class PackagesService {
     const { page = 1, limit = 10 } = paginationDto;
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const qb = this.packageRepo
+      .createQueryBuilder('pkg')
+      .leftJoinAndSelect('pkg.mainImage', 'mainImage')
+      .leftJoinAndSelect('pkg.destination', 'destination')
+      .leftJoinAndSelect('pkg.reviews', 'reviews');
 
     if (filterDto.search) {
-      where.OR = [
-        { title: { contains: filterDto.search } },
-        { description: { contains: filterDto.search } },
-      ];
+      const s = `%${filterDto.search}%`;
+      qb.andWhere(
+        new Brackets((sub) => {
+          sub.where('pkg.title LIKE :s', { s }).orWhere('pkg.description LIKE :s', {
+            s,
+          });
+        }),
+      );
     }
-
     if (filterDto.destinationId) {
-      where.destinationId = filterDto.destinationId;
+      qb.andWhere('pkg.destinationId = :did', { did: filterDto.destinationId });
     }
-
     if (filterDto.bestSeason) {
-      where.bestSeason = { contains: filterDto.bestSeason };
+      qb.andWhere('pkg.bestSeason LIKE :bs', { bs: `%${filterDto.bestSeason}%` });
     }
-
     if (filterDto.activity) {
-      where.activity = { contains: filterDto.activity };
+      qb.andWhere('pkg.activity LIKE :act', { act: `%${filterDto.activity}%` });
     }
 
-    if (filterDto.minPrice || filterDto.maxPrice) {
-      // price is stored as string, so we need to handle this carefully
-      // We'll filter in-memory after query if price filtering is needed
-    }
+    const validSortFields = ['rating', 'createdAt', 'title'];
+    const sortField =
+      filterDto.sortBy && validSortFields.includes(filterDto.sortBy)
+        ? filterDto.sortBy
+        : 'createdAt';
+    const sortOrder =
+      filterDto.sortOrder?.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+    qb.orderBy(`pkg.${sortField}`, sortOrder);
 
-    const orderBy: any = {};
-    if (filterDto.sortBy) {
-      const validSortFields = ['rating', 'createdAt', 'title'];
-      if (validSortFields.includes(filterDto.sortBy)) {
-        orderBy[filterDto.sortBy] = filterDto.sortOrder || 'desc';
-      }
-    } else {
-      orderBy.createdAt = 'desc';
+    const countQb = this.packageRepo.createQueryBuilder('pkg');
+    if (filterDto.search) {
+      const s = `%${filterDto.search}%`;
+      countQb.andWhere(
+        new Brackets((sub) => {
+          sub.where('pkg.title LIKE :s', { s }).orWhere('pkg.description LIKE :s', {
+            s,
+          });
+        }),
+      );
+    }
+    if (filterDto.destinationId) {
+      countQb.andWhere('pkg.destinationId = :did', { did: filterDto.destinationId });
+    }
+    if (filterDto.bestSeason) {
+      countQb.andWhere('pkg.bestSeason LIKE :bs', { bs: `%${filterDto.bestSeason}%` });
+    }
+    if (filterDto.activity) {
+      countQb.andWhere('pkg.activity LIKE :act', { act: `%${filterDto.activity}%` });
     }
 
     const [items, total] = await Promise.all([
-      this.prisma.package.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy,
-        include: {
-          mainImage: true,
-          destination: true,
-          reviews: true,
-        },
-      }),
-      this.prisma.package.count({ where }),
+      qb.skip(skip).take(limit).getMany(),
+      countQb.getCount(),
     ]);
 
     return responseHelper.success('Packages fetched successfully', {
@@ -134,9 +194,10 @@ export class PackagesService {
     const skip = (page - 1) * limit;
 
     const [items, total] = await Promise.all([
-      this.prisma.package.findMany({
+      this.packageRepo.find({
         skip,
         take: limit,
+        relations: ['media', 'destination', 'destination.activity'],
         select: {
           id: true,
           title: true,
@@ -145,28 +206,17 @@ export class PackagesService {
           duration: true,
           price: true,
           groupSize: true,
-          media: {
-            select: {
-              thumbnail: true,
-              alt: true,
-            },
-          },
+          createdAt: true,
+          media: { thumbnail: true, alt: true },
           destination: {
-            select: {
-              name: true,
-              slug: true,
-              activity: {
-                select: {
-                  name: true,
-                  slug: true,
-                },
-              },
-            },
+            name: true,
+            slug: true,
+            activity: { name: true, slug: true },
           },
         },
-        orderBy: { createdAt: 'desc' },
+        order: { createdAt: 'DESC' },
       }),
-      this.prisma.package.count(),
+      this.packageRepo.count(),
     ]);
 
     return responseHelper.success('All packages', {
@@ -179,130 +229,121 @@ export class PackagesService {
   }
 
   async findOne(slug: string) {
-    const pkg = await this.prisma.package.findUnique({
+    const pkg = await this.packageRepo.findOne({
       where: { slug },
-      include: {
-        destination: {
-          select: {
-            name: true,
-            slug: true,
-            activity: {
-              select: {
-                name: true,
-                slug: true,
-              },
-            },
-          },
-        },
-        map: true,
-        seo: {
-          include: {
-            media: true,
-          },
-        },
-        mainImage: true,
-        media: true,
-        faqs: {
-          select: {
-            id: true,
-            question: true,
-            answer: true,
-          },
-        },
-      },
+      relations: [...PKG_DETAIL_RELATIONS],
     });
     if (!pkg) {
       throw new NotFoundException(
         responseHelper.error(`Package with ID ${slug} not found.`),
       );
     }
-    const relatedPackages = await this.prisma.package.findMany({
-      where: { destinationId: pkg.destinationId, NOT: { id: pkg.id } },
+    const relatedPackages = await this.packageRepo.find({
+      where: { destinationId: pkg.destinationId },
+      relations: ['destination', 'media'],
       select: {
-        destination: true,
+        id: true,
         title: true,
         slug: true,
         description: true,
         duration: true,
         price: true,
         groupSize: true,
-        media: {
-          select: {
-            alt: true,
-            thumbnail: true,
-          },
-        },
+        destination: { name: true, slug: true },
+        media: { alt: true, thumbnail: true },
       },
+      order: { createdAt: 'DESC' },
     });
+    const filtered = relatedPackages.filter((p) => p.id !== pkg.id);
 
     return responseHelper.success('Package found', {
       package: pkg,
-      relatedPackages,
+      relatedPackages: filtered,
     });
   }
 
   async update(id: number, updateDto: UpdatePackageDto) {
-    const existing = await this.prisma.package.findUnique({ 
+    const existing = await this.packageRepo.findOne({
       where: { id },
-      include: { media: true }
+      relations: ['media'],
     });
-    const { destinationId, mediaIds, mainImageId, faqs, mapId, ...rest } =
-      updateDto;
-
     if (!existing) {
       throw new NotFoundException(
         responseHelper.error(`Package with ID ${id} not found.`),
       );
     }
-     await this.prisma.media.deleteMany({
-      where:{
-        packageId:id
+
+    const { destinationId, mediaIds, mainImageId, faqs, mapId, seo: seoDto, ...rest } =
+      updateDto;
+
+    await this.dataSource.transaction(async (mgr) => {
+      await mgr
+        .createQueryBuilder()
+        .delete()
+        .from('_mediaPackages')
+        .where('B = :id', { id })
+        .execute();
+      await mgr.delete(Media, { packageId: id });
+
+      if (faqs?.length) {
+        await mgr.delete(Faq, { packageId: id });
       }
-     }) 
-    const updated = await this.prisma.package.update({
-      where: { id },
-      data: {
-        ...rest,
-        destination: updateDto.destinationId
-          ? { connect: { id: updateDto.destinationId } }
-          : undefined,
-        map: updateDto.mapId ? { connect: { id: updateDto.mapId } } : undefined,
-        media: mediaIds?.length > 0
-          ? {
-              set: mediaIds?.map((m) => ({ id: m })),
-            }
-          : { set: [] },
-        mainImage: mainImageId ? { connect: { id: mainImageId } } : undefined,
-        seo: {
-          update: {
-            ...updateDto.seo,
-            mediaId: updateDto.seo?.mediaId || undefined,
-          },
-        },
-        faqs:
-          faqs?.length > 0
-            ? {
-                deleteMany: {},
-                createMany: {
-                  data: faqs,
-                },
-              }
-            : undefined,
-      },
+
+      if (seoDto && existing.seoId) {
+        const seoEnt = await mgr.findOne(Seo, { where: { id: existing.seoId } });
+        if (seoEnt) {
+          for (const [k, v] of Object.entries(seoDto)) {
+            if (v !== undefined) (seoEnt as any)[k] = v;
+          }
+          await mgr.save(seoEnt);
+        }
+      }
+
+      const pkgEnt = await mgr.findOne(Package, { where: { id } });
+      if (pkgEnt) {
+        for (const [k, v] of Object.entries(rest)) {
+          if (v !== undefined) (pkgEnt as any)[k] = v;
+        }
+        if (destinationId !== undefined) pkgEnt.destinationId = destinationId;
+        if (mapId !== undefined) pkgEnt.mapId = mapId;
+        if (mainImageId !== undefined) pkgEnt.mainImageId = mainImageId;
+        await mgr.save(pkgEnt);
+      }
+
+      if (mediaIds?.length) {
+        await mgr
+          .createQueryBuilder()
+          .relation(Package, 'media')
+          .of(id)
+          .add(mediaIds);
+      }
+      if (faqs?.length) {
+        await mgr.insert(
+          Faq,
+          faqs.map((f) => ({
+            question: f.question,
+            answer: f.answer,
+            packageId: id,
+          })),
+        );
+      }
     });
 
+    const updated = await this.packageRepo.findOne({
+      where: { id },
+      relations: [...PKG_DETAIL_RELATIONS, 'reviews'],
+    });
     return responseHelper.success('Package updated successfully', updated);
   }
 
   async remove(id: number) {
-    const existing = await this.prisma.package.findUnique({ where: { id } });
-
+    const existing = await this.packageRepo.findOne({ where: { id } });
     if (!existing) {
       throw new NotFoundException(
         responseHelper.error(`Package with ID ${id} not found.`),
       );
     }
-    const deleted = await this.prisma.package.delete({ where: { id } });
+    const deleted = await this.packageRepo.remove(existing);
     return responseHelper.success('Package deleted successfully', deleted);
   }
 }

@@ -1,34 +1,35 @@
 import { HttpException, Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { CreateCarouselDto } from './dto/create-carousel.dto';
 import { UpdateCarouselDto } from './dto/update-carousel.dto';
-import { PrismaService } from 'src/prisma/prisma.service';
 import responseHelper from 'src/utils/response-helper';
 import { PaginationDto } from 'src/utils/pagination.dto';
+import { Carousel } from 'src/database/entities/carousel.entity';
 
 @Injectable()
 export class CarouselsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @InjectRepository(Carousel)
+    private readonly carouselRepo: Repository<Carousel>,
+  ) {}
+
   async create(createCarouselDto: CreateCarouselDto) {
     const { title, description, link, subtitle, page } = createCarouselDto;
     try {
-      const carousel = await this.prisma.carousel.create({
-        data: {
-          title,
-          subtitle,
-          description,
-          link,
-          media: {
-            connect: {
-              id: createCarouselDto.mediaId,
-            },
-          },
-          page,
-        },
+      const carousel = this.carouselRepo.create({
+        title,
+        subtitle,
+        description,
+        link,
+        mediaId: createCarouselDto.mediaId,
+        page,
       });
+      await this.carouselRepo.save(carousel);
       return responseHelper.success('Carousel created successfully', carousel);
     } catch (error) {
       throw new HttpException(
-        responseHelper.error('Carousel not created', error.message),
+        responseHelper.error('Carousel not created', (error as Error).message),
         400,
       );
     }
@@ -39,12 +40,12 @@ export class CarouselsService {
     const skip = (page - 1) * limit;
 
     const [items, total] = await Promise.all([
-      this.prisma.carousel.findMany({
+      this.carouselRepo.find({
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        order: { createdAt: 'DESC' },
       }),
-      this.prisma.carousel.count(),
+      this.carouselRepo.count(),
     ]);
 
     if (!items.length) {
@@ -61,30 +62,21 @@ export class CarouselsService {
   }
 
   async findByPage(page: string) {
-    const carousels = await this.prisma.carousel.findMany({
-      where: {
-        page,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-      include: {
-        media: true,
-      },
+    const carousels = await this.carouselRepo.find({
+      where: { page },
+      relations: ['media'],
+      order: { createdAt: 'DESC' },
     });
     if (!carousels.length) {
       throw new NotFoundException(responseHelper.error('No data found', null));
     }
     return responseHelper.success('All carousels', carousels);
   }
+
   async findOneById(id: number) {
-    const carousel = await this.prisma.carousel.findUnique({
-      where: {
-        id,
-      },
-      include: {
-        media: true,
-      },
+    const carousel = await this.carouselRepo.findOne({
+      where: { id },
+      relations: ['media'],
     });
     if (!carousel) {
       throw new NotFoundException(
@@ -95,44 +87,25 @@ export class CarouselsService {
   }
 
   async update(id: number, updateCarouselDto: UpdateCarouselDto) {
-    const carousel = await this.prisma.carousel.findUnique({
-      where: {
-        id,
-      },
-    });
+    const carousel = await this.carouselRepo.findOne({ where: { id } });
     if (!carousel) {
       throw new NotFoundException(
         responseHelper.error('Carousel not found', null),
       );
     }
-
-    const response = await this.prisma.carousel.update({
-      where: {
-        id,
-      },
-      data: {
-        ...updateCarouselDto,
-      },
-    });
+    Object.assign(carousel, updateCarouselDto);
+    const response = await this.carouselRepo.save(carousel);
     return responseHelper.success('Carousel updated successfully', response);
   }
 
   async remove(id: number) {
-    const carousel = await this.prisma.carousel.findUnique({
-      where: {
-        id,
-      },
-    });
+    const carousel = await this.carouselRepo.findOne({ where: { id } });
     if (!carousel) {
       throw new NotFoundException(
         responseHelper.error('Carousel not found', null),
       );
     }
-    const response = await this.prisma.carousel.delete({
-      where: {
-        id,
-      },
-    });
-    return responseHelper.success('Carousel deleted successfully', response);
+    await this.carouselRepo.remove(carousel);
+    return responseHelper.success('Carousel deleted successfully', carousel);
   }
 }

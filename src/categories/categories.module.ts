@@ -1,13 +1,14 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { CategoriesService } from './categories.service';
 import { CategoriesController } from './categories.controller';
-import { PrismaModule } from 'src/prisma/prisma.module';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { JwtService } from '@nestjs/jwt';
+import { Category } from 'src/database/entities/category.entity';
+import { Seo } from 'src/database/entities/seo.entity';
+import { AuthModule } from 'src/auth/auth.module';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [AuthModule, TypeOrmModule.forFeature([Category, Seo])],
   controllers: [CategoriesController],
-  providers: [CategoriesService,PrismaService,JwtService],
+  providers: [CategoriesService],
 })
 export class CategoriesModule {}

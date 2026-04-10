@@ -4,16 +4,25 @@ import {
   NotFoundException,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { randomUUID } from 'crypto';
 import Stripe from 'stripe';
 import responseHelper from 'src/utils/response-helper';
+import { Booking } from 'src/database/entities/booking.entity';
+import { Payment } from 'src/database/entities/payment.entity';
 
 @Injectable()
 export class PaymentService {
   private stripe: Stripe;
   private paypalBaseUrl: string;
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    @InjectRepository(Booking)
+    private readonly bookingRepo: Repository<Booking>,
+    @InjectRepository(Payment)
+    private readonly paymentRepo: Repository<Payment>,
+  ) {
     this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
       apiVersion: '2026-02-25.clover',
     });
@@ -23,17 +32,39 @@ export class PaymentService {
         : 'https://api-m.sandbox.paypal.com';
   }
 
-  // ── Stripe ─────────────────────────────────────────────────────────
+  private async upsertPayment(
+    bookingId: number,
+    createData: {
+      status: string;
+      paymentMethod: string;
+      amount: number;
+      currency: string;
+      transactionId: string;
+    },
+    updateData: Partial<Pick<Payment, 'status' | 'transactionId' | 'updatedAt'>>,
+  ) {
+    let row = await this.paymentRepo.findOne({ where: { bookingId } });
+    if (!row) {
+      row = this.paymentRepo.create({
+        id: randomUUID(),
+        bookingId,
+        ...createData,
+      });
+    } else {
+      Object.assign(row, updateData);
+    }
+    await this.paymentRepo.save(row);
+  }
 
   async createStripeIntent(bookingId: number, amount: number) {
-    const booking = await this.prisma.booking.findUnique({
+    const booking = await this.bookingRepo.findOne({
       where: { id: bookingId },
-      include: { package: { select: { title: true } } },
+      relations: ['package'],
     });
     if (!booking) throw new NotFoundException('Booking not found');
 
     const intent = await this.stripe.paymentIntents.create({
-      amount: amount * 100, // Stripe uses cents
+      amount: amount * 100,
       currency: 'usd',
       metadata: {
         bookingId: bookingId.toString(),
@@ -42,10 +73,10 @@ export class PaymentService {
       },
     });
 
-    await this.prisma.booking.update({
-      where: { id: bookingId },
-      data: { paymentMethod: 'stripe' },
-    });
+    await this.bookingRepo.update(
+      { id: bookingId },
+      { paymentMethod: 'stripe' },
+    );
 
     return responseHelper.success('Payment intent created', {
       clientSecret: intent.client_secret,
@@ -55,35 +86,34 @@ export class PaymentService {
 
   async confirmStripePayment(paymentIntentId: string) {
     const intent = await this.stripe.paymentIntents.retrieve(paymentIntentId);
-    const bookingId = parseInt(intent.metadata.bookingId);
+    const bookingId = parseInt(intent.metadata.bookingId, 10);
 
     if (intent.status === 'succeeded') {
-      await this.prisma.payment.upsert({
-        where: { bookingId },
-        create: {
-          bookingId,
+      await this.upsertPayment(
+        bookingId,
+        {
           status: 'paid',
           paymentMethod: 'stripe',
           amount: Math.round(intent.amount / 100),
           currency: intent.currency.toUpperCase(),
           transactionId: paymentIntentId,
         },
-        update: {
+        {
           status: 'paid',
           transactionId: paymentIntentId,
           updatedAt: new Date(),
         },
-      });
+      );
 
-      await this.prisma.booking.update({
-        where: { id: bookingId },
-        data: {
+      await this.bookingRepo.update(
+        { id: bookingId },
+        {
           paymentStatus: 'paid',
           status: 'confirmed',
           paymentMethod: 'stripe',
           totalPrice: Math.round(intent.amount / 100),
         },
-      });
+      );
 
       return responseHelper.success('Payment confirmed', { bookingId });
     }
@@ -110,17 +140,14 @@ export class PaymentService {
 
     if (event.type === 'payment_intent.payment_failed') {
       const intent = event.data.object as Stripe.PaymentIntent;
-      const bookingId = parseInt(intent.metadata.bookingId);
-      await this.prisma.booking.update({
-        where: { id: bookingId },
-        data: { paymentStatus: 'failed' },
-      }).catch(() => {});
+      const bookingId = parseInt(intent.metadata.bookingId, 10);
+      await this.bookingRepo
+        .update({ id: bookingId }, { paymentStatus: 'failed' })
+        .catch(() => {});
     }
 
     return { received: true };
   }
-
-  // ── PayPal ─────────────────────────────────────────────────────────
 
   private async getPayPalAccessToken(): Promise<string> {
     const clientId = process.env.PAYPAL_CLIENT_ID || '';
@@ -142,9 +169,9 @@ export class PaymentService {
   }
 
   async createPayPalOrder(bookingId: number, amount: number) {
-    const booking = await this.prisma.booking.findUnique({
+    const booking = await this.bookingRepo.findOne({
       where: { id: bookingId },
-      include: { package: { select: { title: true } } },
+      relations: ['package'],
     });
     if (!booking) throw new NotFoundException('Booking not found');
 
@@ -174,10 +201,10 @@ export class PaymentService {
     const order = (await res.json()) as any;
     if (!order.id) throw new InternalServerErrorException('PayPal order creation failed');
 
-    await this.prisma.booking.update({
-      where: { id: bookingId },
-      data: { paymentMethod: 'paypal' },
-    });
+    await this.bookingRepo.update(
+      { id: bookingId },
+      { paymentMethod: 'paypal' },
+    );
 
     return responseHelper.success('PayPal order created', {
       orderId: order.id,
@@ -207,83 +234,75 @@ export class PaymentService {
     const captureDetail = unit?.payments?.captures?.[0];
     const amount = parseFloat(captureDetail?.amount?.value || '0');
 
-    await this.prisma.payment.upsert({
-      where: { bookingId },
-      create: {
-        bookingId,
+    await this.upsertPayment(
+      bookingId,
+      {
         status: 'paid',
         paymentMethod: 'paypal',
         amount: Math.round(amount),
         currency: 'USD',
         transactionId: captureDetail?.id || orderId,
       },
-      update: {
+      {
         status: 'paid',
         transactionId: captureDetail?.id || orderId,
         updatedAt: new Date(),
       },
-    });
+    );
 
-    await this.prisma.booking.update({
-      where: { id: bookingId },
-      data: {
+    await this.bookingRepo.update(
+      { id: bookingId },
+      {
         paymentStatus: 'paid',
         status: 'confirmed',
         paymentMethod: 'paypal',
         totalPrice: Math.round(amount),
       },
-    });
+    );
 
     return responseHelper.success('PayPal payment captured', { bookingId });
   }
 
-  // ── Cash ───────────────────────────────────────────────────────────
-
   async registerCashPayment(bookingId: number) {
-    const booking = await this.prisma.booking.findUnique({ where: { id: bookingId } });
+    const booking = await this.bookingRepo.findOne({ where: { id: bookingId } });
     if (!booking) throw new NotFoundException('Booking not found');
 
-    await this.prisma.booking.update({
-      where: { id: bookingId },
-      data: {
+    await this.bookingRepo.update(
+      { id: bookingId },
+      {
         paymentMethod: 'cash',
         paymentStatus: 'pending',
         status: 'confirmed',
       },
-    });
+    );
 
     return responseHelper.success('Cash payment registered. Payment due on arrival.', {
       bookingId,
     });
   }
 
-  // ── Cancel & Refund ────────────────────────────────────────────────
-
   async cancelBooking(bookingId: number, reason?: string) {
-    const booking = await this.prisma.booking.findUnique({
+    const booking = await this.bookingRepo.findOne({
       where: { id: bookingId },
-      include: { payment: true },
+      relations: ['payment'],
     });
     if (!booking) throw new NotFoundException('Booking not found');
     if (booking.status === 'cancelled') {
       throw new BadRequestException('Booking is already cancelled');
     }
 
-    const updateData: any = {
+    const updateData: Partial<Booking> = {
       status: 'cancelled',
       cancelReason: reason || null,
       cancelledAt: new Date(),
     };
 
-    // If payment was made, set refund status to requested
     if (booking.paymentStatus === 'paid' && booking.payment) {
       updateData.refundStatus = 'requested';
     }
 
-    const updated = await this.prisma.booking.update({
-      where: { id: bookingId },
-      data: updateData,
-    });
+    await this.bookingRepo.update({ id: bookingId }, updateData);
+    const updated = await this.bookingRepo.findOne({ where: { id: bookingId } });
 
     return responseHelper.success(
       booking.paymentStatus === 'paid'
@@ -293,10 +312,14 @@ export class PaymentService {
     );
   }
 
-  async processRefund(bookingId: number, action: 'approved' | 'rejected', refundAmount?: number) {
-    const booking = await this.prisma.booking.findUnique({
+  async processRefund(
+    bookingId: number,
+    action: 'approved' | 'rejected',
+    refundAmount?: number,
+  ) {
+    const booking = await this.bookingRepo.findOne({
       where: { id: bookingId },
-      include: { payment: true },
+      relations: ['payment'],
     });
     if (!booking) throw new NotFoundException('Booking not found');
     if (booking.refundStatus !== 'requested') {
@@ -304,14 +327,10 @@ export class PaymentService {
     }
 
     if (action === 'rejected') {
-      await this.prisma.booking.update({
-        where: { id: bookingId },
-        data: { refundStatus: 'rejected' },
-      });
+      await this.bookingRepo.update({ id: bookingId }, { refundStatus: 'rejected' });
       return responseHelper.success('Refund request rejected', {});
     }
 
-    // Approved — process refund via original payment method
     const amount = refundAmount || booking.payment?.amount || booking.totalPrice || 0;
     const payment = booking.payment;
 
@@ -322,16 +341,15 @@ export class PaymentService {
           amount: amount * 100,
         });
 
-        await this.prisma.payment.update({
-          where: { bookingId },
-          data: {
-            refundId: refund.id,
-            refundedAt: new Date(),
-            refundStatus: 'completed',
-            refundAmount: amount,
-            updatedAt: new Date(),
-          },
-        });
+        const payRow = await this.paymentRepo.findOne({ where: { bookingId } });
+        if (payRow) {
+          payRow.refundId = refund.id;
+          payRow.refundedAt = new Date();
+          payRow.refundStatus = 'completed';
+          payRow.refundAmount = amount;
+          payRow.updatedAt = new Date();
+          await this.paymentRepo.save(payRow);
+        }
       } else if (payment?.paymentMethod === 'paypal' && payment.transactionId) {
         const token = await this.getPayPalAccessToken();
         const res = await fetch(
@@ -349,41 +367,38 @@ export class PaymentService {
         );
         const refundData = (await res.json()) as any;
 
-        await this.prisma.payment.update({
-          where: { bookingId },
-          data: {
-            refundId: refundData.id,
-            refundedAt: new Date(),
-            refundStatus: 'completed',
-            refundAmount: amount,
-            updatedAt: new Date(),
-          },
-        });
+        const payRow = await this.paymentRepo.findOne({ where: { bookingId } });
+        if (payRow) {
+          payRow.refundId = refundData.id;
+          payRow.refundedAt = new Date();
+          payRow.refundStatus = 'completed';
+          payRow.refundAmount = amount;
+          payRow.updatedAt = new Date();
+          await this.paymentRepo.save(payRow);
+        }
       }
-      // Cash: no API call needed
 
-      await this.prisma.booking.update({
-        where: { id: bookingId },
-        data: {
+      await this.bookingRepo.update(
+        { id: bookingId },
+        {
           refundStatus: 'completed',
           refundAmount: amount,
         },
-      });
+      );
 
       return responseHelper.success('Refund processed successfully', { bookingId, amount });
     } catch (err) {
-      await this.prisma.booking.update({
-        where: { id: bookingId },
-        data: { refundStatus: 'failed' },
-      });
-      throw new InternalServerErrorException('Refund processing failed: ' + err.message);
+      await this.bookingRepo.update({ id: bookingId }, { refundStatus: 'failed' });
+      throw new InternalServerErrorException(
+        'Refund processing failed: ' + (err as Error).message,
+      );
     }
   }
 
   async getPaymentStatus(bookingId: number) {
-    const booking = await this.prisma.booking.findUnique({
+    const booking = await this.bookingRepo.findOne({
       where: { id: bookingId },
-      include: { payment: true },
+      relations: ['payment'],
     });
     if (!booking) throw new NotFoundException('Booking not found');
     return responseHelper.success('Payment status retrieved', {

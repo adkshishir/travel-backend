@@ -5,15 +5,20 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { InjectRepository } from '@nestjs/typeorm';
+import { In, Repository } from 'typeorm';
 import responseHelper from 'src/utils/response-helper';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { User } from 'src/database/entities/user.entity';
+import { UserRole } from 'src/database/entities/user-role.enum';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
   constructor(
     private readonly jwtService: JwtService,
-    private readonly prisma: PrismaService,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
   ) {}
+
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
     const authorization = request.headers.authorization;
@@ -28,9 +33,7 @@ export class AuthGuard implements CanActivate {
     }
     let decoded: any;
     try {
-      decoded = this.jwtService.verify(token, {
-        secret: process.env.JWT_SECRET,
-      });
+      decoded = this.jwtService.verify(token);
     } catch (error) {
       throw new UnauthorizedException(
         responseHelper.error('You did something wrong with the token'),
@@ -40,12 +43,10 @@ export class AuthGuard implements CanActivate {
     if (!decoded) {
       throw new UnauthorizedException(responseHelper.error('Invalid token'));
     }
-    const user = await this.prisma.user.findUnique({
+    const user = await this.userRepo.findOne({
       where: {
         id: decoded.id,
-        role: {
-          in: ['AUTHOR', 'ADMIN'],
-        },
+        role: In([UserRole.AUTHOR, UserRole.ADMIN]),
       },
     });
     if (!user) {

@@ -1,11 +1,13 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { UploadService } from './upload.service';
 import { UploadController } from './upload.controller';
-import { PrismaService } from '../prisma/prisma.service';
-import { JwtService } from '@nestjs/jwt';
+import { Media } from 'src/database/entities/media.entity';
+import { AuthModule } from 'src/auth/auth.module';
 
 @Module({
+  imports: [AuthModule, TypeOrmModule.forFeature([Media])],
   controllers: [UploadController],
-  providers: [UploadService,PrismaService,JwtService],
+  providers: [UploadService],
 })
 export class UploadModule {}

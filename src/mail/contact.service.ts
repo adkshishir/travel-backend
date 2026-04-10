@@ -1,23 +1,27 @@
 import { Injectable, NotFoundException, InternalServerErrorException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { CreateContactDto } from './dto/create-contact.dto';
 import { UpdateContactDto } from './dto/update-contact.dto';
 import responseHelper from 'src/utils/response-helper';
 import { PaginationDto } from 'src/utils/pagination.dto';
+import { Mail } from 'src/database/entities/mail.entity';
 
 @Injectable()
 export class ContactService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @InjectRepository(Mail)
+    private readonly mailRepo: Repository<Mail>,
+  ) {}
 
   async create(createContactDto: CreateContactDto) {
     try {
-      const mail = await this.prisma.mail.create({
-        data: createContactDto,
-      });
+      const mail = this.mailRepo.create(createContactDto as any);
+      await this.mailRepo.save(mail);
       return responseHelper.success('Contact message sent successfully', mail);
     } catch (error) {
       throw new InternalServerErrorException(
-        responseHelper.error('Failed to send contact message', error.message),
+        responseHelper.error('Failed to send contact message', (error as Error).message),
       );
     }
   }
@@ -28,24 +32,13 @@ export class ContactService {
 
     try {
       const [items, total] = await Promise.all([
-        this.prisma.mail.findMany({
+        this.mailRepo.find({
           skip,
           take: limit,
-          include: {
-            Media: {
-              select: {
-                id: true,
-                thumbnail: true,
-                original: true,
-                alt: true,
-              }
-            }
-          },
-          orderBy: {
-            createdAt: 'desc'
-          }
+          relations: ['Media'],
+          order: { createdAt: 'DESC' },
         }),
-        this.prisma.mail.count(),
+        this.mailRepo.count(),
       ]);
 
       return responseHelper.success(
@@ -60,18 +53,16 @@ export class ContactService {
       );
     } catch (error) {
       throw new InternalServerErrorException(
-        responseHelper.error('Failed to retrieve contact messages', error.message),
+        responseHelper.error('Failed to retrieve contact messages', (error as Error).message),
       );
     }
   }
 
   async findOne(id: number) {
     try {
-      const mail = await this.prisma.mail.findUnique({
+      const mail = await this.mailRepo.findOne({
         where: { id },
-        include: {
-          Media: true
-        }
+        relations: ['Media'],
       });
       if (!mail) {
         throw new NotFoundException(
@@ -82,45 +73,45 @@ export class ContactService {
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException(
-        responseHelper.error('Failed to retrieve contact message', error.message),
+        responseHelper.error('Failed to retrieve contact message', (error as Error).message),
       );
     }
   }
 
   async update(id: number, updateContactDto: UpdateContactDto) {
     try {
-      const mail = await this.prisma.mail.update({
-        where: { id },
-        data: updateContactDto,
-      });
-      return responseHelper.success('Contact message updated successfully', mail);
-    } catch (error) {
-      if (error.code === 'P2025') {
+      const existing = await this.mailRepo.findOne({ where: { id } });
+      if (!existing) {
         throw new NotFoundException(
           responseHelper.error(`Contact message with ID ${id} not found`),
         );
       }
+      Object.assign(existing, updateContactDto);
+      const mail = await this.mailRepo.save(existing);
+      return responseHelper.success('Contact message updated successfully', mail);
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException(
-        responseHelper.error('Failed to update contact message', error.message),
+        responseHelper.error('Failed to update contact message', (error as Error).message),
       );
     }
   }
 
   async remove(id: number) {
     try {
-      const mail = await this.prisma.mail.delete({
-        where: { id },
-      });
-      return responseHelper.success('Contact message deleted successfully', mail);
-    } catch (error) {
-      if (error.code === 'P2025') {
+      const existing = await this.mailRepo.findOne({ where: { id } });
+      if (!existing) {
         throw new NotFoundException(
           responseHelper.error(`Contact message with ID ${id} not found`),
         );
       }
+      await this.mailRepo.remove(existing);
+      return responseHelper.success('Contact message deleted successfully', existing);
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException(
-        responseHelper.error('Failed to delete contact message', error.message),
+        responseHelper.error('Failed to delete contact message', (error as Error).message),
       );
     }
   }
-} 
+}

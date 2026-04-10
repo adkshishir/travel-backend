@@ -4,19 +4,24 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import * as sharp from 'sharp';
 import * as fs from 'fs';
 import * as path from 'path';
 import { CreateUploadDto } from './dto/create-upload.dto';
 import responseHelper from 'src/utils/response-helper';
+import { Media } from 'src/database/entities/media.entity';
 
 @Injectable()
 export class UploadService {
   private baseUploadDir = path.join(__dirname, '../../uploads');
-  private baseUrl = 'https://api-poonhill.adhikarishishir.com.np'; // Update this as needed
+  private baseUrl = 'https://api-poonhill.adhikarishishir.com.np';
 
-  constructor(private prisma: PrismaService) {
+  constructor(
+    @InjectRepository(Media)
+    private readonly mediaRepo: Repository<Media>,
+  ) {
     if (!fs.existsSync(this.baseUploadDir)) {
       fs.mkdirSync(this.baseUploadDir, { recursive: true });
     }
@@ -45,13 +50,11 @@ export class UploadService {
 
       const webpFileName = `${baseFileName}.webp`;
 
-      // File paths
       const originalPath = path.join(folderPath, webpFileName);
       const cardPath = path.join(folderPath, `card-${webpFileName}`);
       const phonePath = path.join(folderPath, `phone-${webpFileName}`);
 
-      // Check for existing file in DB
-      const existingMedia = await this.prisma.media.findFirst({
+      const existingMedia = await this.mediaRepo.findOne({
         where: {
           original: `${this.baseUrl}/uploads/${safeFolder}/${webpFileName}`,
         },
@@ -61,7 +64,6 @@ export class UploadService {
         return existingMedia;
       }
 
-      // Save images in different sizes
       await sharp(file.buffer).toFormat('webp').toFile(originalPath);
       await sharp(file.buffer)
         .resize(300, 200)
@@ -72,59 +74,47 @@ export class UploadService {
         .toFormat('webp', { quality: 50 })
         .toFile(phonePath);
 
-      const media = await this.prisma.media.create({
-        data: {
-          original: `${this.baseUrl}/uploads/${safeFolder}/${webpFileName}`,
-          thumbnail: `${this.baseUrl}/uploads/${safeFolder}/card-${webpFileName}`,
-          phone: `${this.baseUrl}/uploads/${safeFolder}/phone-${webpFileName}`,
-          type: 'image',
-          alt,
-        },
+      const media = this.mediaRepo.create({
+        original: `${this.baseUrl}/uploads/${safeFolder}/${webpFileName}`,
+        thumbnail: `${this.baseUrl}/uploads/${safeFolder}/card-${webpFileName}`,
+        phone: `${this.baseUrl}/uploads/${safeFolder}/phone-${webpFileName}`,
+        type: 'image',
+        alt,
       });
+      await this.mediaRepo.save(media);
 
       return media;
     } catch (error) {
       console.error('Upload Error:', error);
       throw new InternalServerErrorException(
-        responseHelper.error('Failed to process and save the image.', error.message),
+        responseHelper.error('Failed to process and save the image.', (error as Error).message),
       );
     }
   }
 
   async deleteFile(id: number) {
     try {
-      const media = await this.prisma.media.findUnique({ where: { id } });
+      const media = await this.mediaRepo.findOne({ where: { id } });
 
       if (!media) throw new NotFoundException(responseHelper.error('File not found'));
 
-      // const filesToDelete = [media.original, media.thumbnail, media.phone];
-
-      // for (const fileUrl of filesToDelete) {
-      //   try {
-      //     if (fs.existsSync(fileUrl)) {
-      //       fs.unlinkSync(fileUrl);
-      //     }
-      //   } catch (error) {
-      //     throw new Error(`Failed to delete file: ${fileUrl}`);
-      //   }
-      // }
-
-      await this.prisma.media.delete({ where: { id } });
+      await this.mediaRepo.remove(media);
       return responseHelper.success('File deleted successfully', media);
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException(
-        responseHelper.error('Failed to delete file', error.message),
+        responseHelper.error('Failed to delete file', (error as Error).message),
       );
     }
   }
+
   async findAll() {
     try {
-      const files = await this.prisma.media.findMany();
+      const files = await this.mediaRepo.find();
       return responseHelper.success('All files', files);
     } catch (error) {
       throw new InternalServerErrorException(
-        responseHelper.error('Failed to retrieve files', error.message),
+        responseHelper.error('Failed to retrieve files', (error as Error).message),
       );
     }
   }

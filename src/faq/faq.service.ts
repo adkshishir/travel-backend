@@ -1,20 +1,25 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { CreateFaqDto } from './dto/create-faq.dto';
 import { UpdateFaqDto } from './dto/update-faq.dto';
-import { PrismaService } from 'src/prisma/prisma.service';
 import responseHelper from 'src/utils/response-helper';
 import { PaginationDto } from 'src/utils/pagination.dto';
+import { Faq } from 'src/database/entities/faq.entity';
 
 @Injectable()
 export class FaqService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @InjectRepository(Faq)
+    private readonly faqRepo: Repository<Faq>,
+  ) {}
+
   async create(createFaqDto: CreateFaqDto) {
-    const faq = await this.prisma.faq.create({
-      data: {
-        question: createFaqDto.question,
-        answer: createFaqDto.answer,
-      },
+    const faq = this.faqRepo.create({
+      question: createFaqDto.question,
+      answer: createFaqDto.answer,
     });
+    await this.faqRepo.save(faq);
     return responseHelper.success('Faq created successfully', faq);
   }
 
@@ -22,17 +27,16 @@ export class FaqService {
     const { page = 1, limit = 10 } = paginationDto;
     const skip = (page - 1) * limit;
 
-    const where = { packageId: null };
+    const where = { packageId: IsNull() };
 
     const [items, total] = await Promise.all([
-      this.prisma.faq.findMany({
+      this.faqRepo.find({
+        where,
         skip,
         take: limit,
-        // find that doesnot have packageId
-        where,
-        orderBy: { createdAt: 'desc' },
+        order: { createdAt: 'DESC' },
       }),
-      this.prisma.faq.count({ where }),
+      this.faqRepo.count({ where }),
     ]);
 
     if (!items.length) {
@@ -49,11 +53,7 @@ export class FaqService {
   }
 
   async findOne(id: number) {
-    const faq = await this.prisma.faq.findUnique({
-      where: {
-        id: id,
-      },
-    });
+    const faq = await this.faqRepo.findOne({ where: { id } });
     if (!faq) {
       throw new NotFoundException(responseHelper.error('Faq not found', null));
     }
@@ -61,40 +61,22 @@ export class FaqService {
   }
 
   async update(id: number, updateFaqDto: UpdateFaqDto) {
-    const faq = await this.prisma.faq.findUnique({
-      where: {
-        id: id,
-      },
-    });
+    const faq = await this.faqRepo.findOne({ where: { id } });
     if (!faq) {
       throw new NotFoundException(responseHelper.error('Faq not found', null));
     }
-    const response = await this.prisma.faq.update({
-      where: {
-        id: id,
-      },
-      data: {
-        question: updateFaqDto.question,
-        answer: updateFaqDto.answer,
-      },
-    });
+    faq.question = updateFaqDto.question;
+    faq.answer = updateFaqDto.answer;
+    const response = await this.faqRepo.save(faq);
     return responseHelper.success('Faq updated successfully', response);
   }
 
   async remove(id: number) {
-    const faq = await this.prisma.faq.findUnique({
-      where: {
-        id: id,
-      },
-    });
+    const faq = await this.faqRepo.findOne({ where: { id } });
     if (!faq) {
       throw new NotFoundException(responseHelper.error('Faq not found', null));
     }
-    const response = await this.prisma.faq.delete({
-      where: {
-        id: id,
-      },
-    });
-    return responseHelper.success('Faq deleted successfully', response);
+    await this.faqRepo.remove(faq);
+    return responseHelper.success('Faq deleted successfully', faq);
   }
 }

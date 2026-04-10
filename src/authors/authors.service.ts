@@ -4,28 +4,30 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { CreateAuthorDto } from './dto/create-author.dto';
 import { UpdateAuthorDto } from './dto/update-author.dto';
-import { PrismaService } from 'src/prisma/prisma.service';
 import responseHelper from 'src/utils/response-helper';
 import { PaginationDto } from 'src/utils/pagination.dto';
+import { Author } from 'src/database/entities/author.entity';
 
 @Injectable()
 export class AuthorsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @InjectRepository(Author)
+    private readonly authorRepo: Repository<Author>,
+  ) {}
+
   async create(createAuthorDto: CreateAuthorDto): Promise<any> {
-    // Check for existing email (email is unique)
-    const existingEmail = await this.prisma.author.findUnique({
+    const existingEmail = await this.authorRepo.findOne({
       where: { email: createAuthorDto.email },
     });
 
-    // Check for existing username+email combination
-    const existingUsernameEmail = await this.prisma.author.findUnique({
-      where: { 
-        username_email: {
-          username: createAuthorDto.username,
-          email: createAuthorDto.email
-        }
+    const existingUsernameEmail = await this.authorRepo.findOne({
+      where: {
+        username: createAuthorDto.username,
+        email: createAuthorDto.email,
       },
     });
 
@@ -38,29 +40,40 @@ export class AuthorsService {
       );
     }
 
+    if (existingUsernameEmail) {
+      const validationErrors: Record<string, string[]> = {};
+      validationErrors.username = ['Username and email combination already exists'];
+      throw new BadRequestException(
+        responseHelper.validationError('Validation failed', validationErrors),
+      );
+    }
+
     try {
-      const author = await this.prisma.author.create({
-        data: {
-          name: createAuthorDto.name,
-          username: createAuthorDto.username,
-          email: createAuthorDto.email,
-          bio: createAuthorDto.bio,
-          socialLinks: createAuthorDto.socialLinks,
-          website: createAuthorDto.website,
-          role: createAuthorDto.role || 'author',
-          status: createAuthorDto.status || 'active',
-          mediaId: createAuthorDto.mediaId,
-        },
-        include: { media: true },
+      const author = this.authorRepo.create({
+        name: createAuthorDto.name,
+        username: createAuthorDto.username,
+        email: createAuthorDto.email,
+        bio: createAuthorDto.bio,
+        socialLinks: createAuthorDto.socialLinks,
+        website: createAuthorDto.website,
+        role: createAuthorDto.role || 'author',
+        status: createAuthorDto.status || 'active',
+        mediaId: createAuthorDto.mediaId,
+      });
+      await this.authorRepo.save(author);
+
+      const full = await this.authorRepo.findOne({
+        where: { id: author.id },
+        relations: ['media'],
       });
 
-      if (!author) {
+      if (!full) {
         throw new InternalServerErrorException(
           responseHelper.internalError('Failed to create author'),
         );
       }
 
-      return responseHelper.success('Author created successfully', author);
+      return responseHelper.success('Author created successfully', full);
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;
@@ -80,15 +93,13 @@ export class AuthorsService {
     const skip = (page - 1) * limit;
 
     const [items, total] = await Promise.all([
-      this.prisma.author.findMany({
+      this.authorRepo.find({
         skip,
         take: limit,
-        include: {
-          media: true,
-        },
-        orderBy: { createdAt: 'desc' },
+        relations: ['media'],
+        order: { createdAt: 'DESC' },
       }),
-      this.prisma.author.count(),
+      this.authorRepo.count(),
     ]);
 
     if (!items.length) {
@@ -107,20 +118,9 @@ export class AuthorsService {
   }
 
   async findOne(id: number) {
-    const author = await this.prisma.author.findUnique({
+    const author = await this.authorRepo.findOne({
       where: { id },
-      include: {
-        media: true,
-        blogs: {
-          select: {
-            id: true,
-            title: true,
-            slug: true,
-            createdAt: true,
-            isPublished: true,
-          },
-        },
-      },
+      relations: ['media', 'blogs'],
     });
     if (!author) {
       throw new NotFoundException(
@@ -131,34 +131,29 @@ export class AuthorsService {
   }
 
   async update(id: number, updateAuthorDto: UpdateAuthorDto) {
-    const author = await this.prisma.author.findUnique({
-      where: { id },
-    });
+    const author = await this.authorRepo.findOne({ where: { id } });
     if (!author) {
       throw new NotFoundException(
         responseHelper.error('No author found', null),
       );
     }
-    const updatedAuthor = await this.prisma.author.update({
+    Object.assign(author, updateAuthorDto);
+    await this.authorRepo.save(author);
+    const updatedAuthor = await this.authorRepo.findOne({
       where: { id },
-      data: updateAuthorDto,
-      include: { media: true },
+      relations: ['media'],
     });
     return responseHelper.success('Author updated successfully', updatedAuthor);
   }
 
   async remove(id: number) {
-    const author = await this.prisma.author.findUnique({
-      where: { id },
-    });
+    const author = await this.authorRepo.findOne({ where: { id } });
     if (!author) {
       throw new NotFoundException(
         responseHelper.error('No author found', null),
       );
     }
-    const deletedAuthor = await this.prisma.author.delete({
-      where: { id },
-    });
-    return responseHelper.success('Author deleted successfully', deletedAuthor);
+    await this.authorRepo.remove(author);
+    return responseHelper.success('Author deleted successfully', author);
   }
 }

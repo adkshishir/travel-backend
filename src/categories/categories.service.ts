@@ -1,19 +1,25 @@
 import { HttpException, Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
-import { PrismaService } from 'src/prisma/prisma.service';
 import responseHelper from 'src/utils/response-helper';
 import { PaginationDto } from 'src/utils/pagination.dto';
+import { Category } from 'src/database/entities/category.entity';
+import { Seo } from 'src/database/entities/seo.entity';
 
 @Injectable()
 export class CategoriesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    @InjectRepository(Category)
+    private readonly categoryRepo: Repository<Category>,
+    @InjectRepository(Seo)
+    private readonly seoRepo: Repository<Seo>,
+  ) {}
 
   async create(createCategoryDto: CreateCategoryDto) {
-    const exist = await this.prisma.category.findUnique({
-      where: {
-        endpoint: createCategoryDto.endpoint,
-      },
+    const exist = await this.categoryRepo.findOne({
+      where: { endpoint: createCategoryDto.endpoint },
     });
     if (exist) {
       throw new NotFoundException(
@@ -22,32 +28,34 @@ export class CategoriesService {
     }
 
     try {
-      const category = await this.prisma.category.create({
-        data: {
-          endpoint: createCategoryDto.endpoint,
-          content: createCategoryDto.content,
-          title: createCategoryDto.title,
-          slug: createCategoryDto.slug || createCategoryDto.endpoint,
-          isActive: createCategoryDto.isActive ?? true,
-          seo: createCategoryDto.seo ? {
-            create: {
-              ...createCategoryDto.seo,
-              mediaId: createCategoryDto.seo?.mediaId || undefined,
-            },
-          } : undefined,
-        },
-        include: {
-          seo: {
-            include: {
-              media: true,
-            },
-          },
-        },
+      let seoId: number | null = null;
+      if (createCategoryDto.seo) {
+        const seoRow = this.seoRepo.create({
+          ...createCategoryDto.seo,
+          mediaId: createCategoryDto.seo?.mediaId ?? null,
+        } as Partial<Seo>);
+        await this.seoRepo.save(seoRow);
+        seoId = seoRow.id;
+      }
+
+      const category = this.categoryRepo.create({
+        endpoint: createCategoryDto.endpoint,
+        content: createCategoryDto.content,
+        title: createCategoryDto.title,
+        slug: createCategoryDto.slug || createCategoryDto.endpoint,
+        isActive: createCategoryDto.isActive ?? true,
+        seoId,
       });
-      return responseHelper.success('Category created successfully', category);
+      await this.categoryRepo.save(category);
+
+      const full = await this.categoryRepo.findOne({
+        where: { id: category.id },
+        relations: ['seo', 'seo.media'],
+      });
+      return responseHelper.success('Category created successfully', full);
     } catch (error) {
       throw new HttpException(
-        responseHelper.error('Category not created', error.message),
+        responseHelper.error('Category not created', (error as Error).message),
         400,
       );
     }
@@ -58,21 +66,13 @@ export class CategoriesService {
     const skip = (page - 1) * limit;
 
     const [items, total] = await Promise.all([
-      this.prisma.category.findMany({
+      this.categoryRepo.find({
         skip,
         take: limit,
-        include: {
-          seo: {
-            include: {
-              media: true,
-            },
-          },
-        },
-        orderBy: {
-          createdAt: 'desc',
-        },
+        relations: ['seo', 'seo.media'],
+        order: { createdAt: 'DESC' },
       }),
-      this.prisma.category.count(),
+      this.categoryRepo.count(),
     ]);
 
     return responseHelper.success('All categories', {
@@ -85,22 +85,9 @@ export class CategoriesService {
   }
 
   async findOne(identifier: string) {
-    // Try to find by endpoint first, then by slug
-    const category = await this.prisma.category.findFirst({
-      where: {
-        OR: [
-          { endpoint: identifier },
-          { slug: identifier },
-        ],
-      
-      },
-      include: {
-        seo: {
-          include: {
-            media: true,
-          },
-        },
-      },
+    const category = await this.categoryRepo.findOne({
+      where: [{ endpoint: identifier }, { slug: identifier }],
+      relations: ['seo', 'seo.media'],
     });
 
     if (!category) {
@@ -113,9 +100,7 @@ export class CategoriesService {
   }
 
   async update(id: number, updateCategoryDto: UpdateCategoryDto) {
-    const exist = await this.prisma.category.findUnique({
-      where: { id },
-    });
+    const exist = await this.categoryRepo.findOne({ where: { id } });
 
     if (!exist) {
       throw new NotFoundException(
@@ -123,9 +108,8 @@ export class CategoriesService {
       );
     }
 
-    // Check if endpoint is being updated and if it conflicts with existing
     if (updateCategoryDto.endpoint && updateCategoryDto.endpoint !== exist.endpoint) {
-      const endpointExists = await this.prisma.category.findUnique({
+      const endpointExists = await this.categoryRepo.findOne({
         where: { endpoint: updateCategoryDto.endpoint },
       });
       if (endpointExists) {
@@ -137,48 +121,51 @@ export class CategoriesService {
     }
 
     try {
-      const category = await this.prisma.category.update({
+      if (updateCategoryDto.seo) {
+        if (exist.seoId) {
+          const seo = await this.seoRepo.findOne({ where: { id: exist.seoId } });
+          if (seo) {
+            for (const [k, v] of Object.entries(updateCategoryDto.seo)) {
+              if (v !== undefined) (seo as any)[k] = v;
+            }
+            await this.seoRepo.save(seo);
+          }
+        } else {
+          const seoRow = this.seoRepo.create({
+            ...updateCategoryDto.seo,
+            mediaId: updateCategoryDto.seo?.mediaId ?? null,
+          } as Partial<Seo>);
+          await this.seoRepo.save(seoRow);
+          exist.seoId = seoRow.id;
+        }
+      }
+
+      if (updateCategoryDto.endpoint !== undefined)
+        exist.endpoint = updateCategoryDto.endpoint;
+      if (updateCategoryDto.content !== undefined)
+        exist.content = updateCategoryDto.content;
+      if (updateCategoryDto.title !== undefined) exist.title = updateCategoryDto.title;
+      if (updateCategoryDto.slug !== undefined) exist.slug = updateCategoryDto.slug;
+      if (updateCategoryDto.isActive !== undefined)
+        exist.isActive = updateCategoryDto.isActive;
+
+      await this.categoryRepo.save(exist);
+
+      const category = await this.categoryRepo.findOne({
         where: { id },
-        data: {
-          endpoint: updateCategoryDto.endpoint,
-          content: updateCategoryDto.content,
-          title: updateCategoryDto.title,
-          slug: updateCategoryDto.slug,
-          isActive: updateCategoryDto.isActive,
-          seo: updateCategoryDto.seo ? {
-            upsert: {
-              create: {
-                ...updateCategoryDto.seo,
-                mediaId: updateCategoryDto.seo?.mediaId || undefined,
-              },
-              update: {
-                ...updateCategoryDto.seo,
-                mediaId: updateCategoryDto.seo?.mediaId || undefined,
-              },
-            },
-          } : undefined,
-        },
-        include: {
-          seo: {
-            include: {
-              media: true,
-            },
-          },
-        },
+        relations: ['seo', 'seo.media'],
       });
       return responseHelper.success('Category updated successfully', category);
     } catch (error) {
       throw new HttpException(
-        responseHelper.error('Category not updated', error.message),
+        responseHelper.error('Category not updated', (error as Error).message),
         400,
       );
     }
   }
 
   async remove(id: number) {
-    const exist = await this.prisma.category.findUnique({
-      where: { id },
-    });
+    const exist = await this.categoryRepo.findOne({ where: { id } });
 
     if (!exist) {
       throw new NotFoundException(
@@ -187,13 +174,11 @@ export class CategoriesService {
     }
 
     try {
-      await this.prisma.category.delete({
-        where: { id },
-      });
+      await this.categoryRepo.remove(exist);
       return responseHelper.success('Category deleted successfully', null);
     } catch (error) {
       throw new HttpException(
-        responseHelper.error('Category not deleted', error.message),
+        responseHelper.error('Category not deleted', (error as Error).message),
         400,
       );
     }

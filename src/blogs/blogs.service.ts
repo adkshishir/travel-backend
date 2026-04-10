@@ -1,43 +1,60 @@
 import { Injectable, NotFoundException, InternalServerErrorException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import responseHelper from 'src/utils/response-helper';
 import { PaginationDto } from 'src/utils/pagination.dto';
+import { Blog } from 'src/database/entities/blog.entity';
+import { Seo } from 'src/database/entities/seo.entity';
 
 @Injectable()
 export class BlogsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    @InjectRepository(Blog)
+    private readonly blogRepo: Repository<Blog>,
+    @InjectRepository(Seo)
+    private readonly seoRepo: Repository<Seo>,
+  ) {}
 
   async create(createBlogDto: any) {
     try {
       const { seo, ...blogData } = createBlogDto;
-      
-      // Handle SEO creation if SEO data is provided
-      let seoId = null;
-      if (seo && (seo.metaTitle || seo.metaDescription || seo.metaKeywords || seo.metaCanonical || seo.schema || seo.mediaId)) {
-        const createdSeo = await this.prisma.seo.create({
-          data: {
-            metaTitle: seo.metaTitle || null,
-            metaDescription: seo.metaDescription || null,
-            metaKeywords: seo.metaKeywords || null,
-            metaCanonical: seo.metaCanonical || null,
-            schema: seo.schema || null,
-            mediaId: seo.mediaId || null,
-          },
+
+      let seoId: number | null = null;
+      if (
+        seo &&
+        (seo.metaTitle ||
+          seo.metaDescription ||
+          seo.metaKeywords ||
+          seo.metaCanonical ||
+          seo.schema ||
+          seo.mediaId)
+      ) {
+        const createdSeo = this.seoRepo.create({
+          metaTitle: seo.metaTitle || null,
+          metaDescription: seo.metaDescription || null,
+          metaKeywords: seo.metaKeywords || null,
+          metaCanonical: seo.metaCanonical || null,
+          schema: seo.schema || null,
+          mediaId: seo.mediaId || null,
         });
+        await this.seoRepo.save(createdSeo);
         seoId = createdSeo.id;
       }
 
-      const newBlog = await this.prisma.blog.create({
-        data: {
-          ...blogData,
-          seoId,
-        },
-        include: { seo: true, media: true, author: true },
+      const newBlog = this.blogRepo.create({
+        ...blogData,
+        seoId,
+      } as Partial<Blog>);
+      await this.blogRepo.save(newBlog);
+
+      const full = await this.blogRepo.findOne({
+        where: { id: (newBlog as Blog).id },
+        relations: ['seo', 'media', 'author'],
       });
-      return responseHelper.success('Blog created successfully', newBlog);
+      return responseHelper.success('Blog created successfully', full);
     } catch (error) {
       throw new InternalServerErrorException(
-        responseHelper.error('Failed to create blog', error.message),
+        responseHelper.error('Failed to create blog', (error as Error).message),
       );
     }
   }
@@ -48,13 +65,13 @@ export class BlogsService {
 
     try {
       const [items, total] = await Promise.all([
-        this.prisma.blog.findMany({
+        this.blogRepo.find({
           skip,
           take: limit,
-          include: { seo: true, media: true, author: true },
-          orderBy: { createdAt: 'desc' },
+          relations: ['seo', 'media', 'author'],
+          order: { createdAt: 'DESC' },
         }),
-        this.prisma.blog.count(),
+        this.blogRepo.count(),
       ]);
 
       return responseHelper.success('All blogs', {
@@ -66,16 +83,16 @@ export class BlogsService {
       });
     } catch (error) {
       throw new InternalServerErrorException(
-        responseHelper.error('Failed to retrieve blogs', error.message),
+        responseHelper.error('Failed to retrieve blogs', (error as Error).message),
       );
     }
   }
 
   async findOne(slug: string) {
     try {
-      const blog = await this.prisma.blog.findUnique({
+      const blog = await this.blogRepo.findOne({
         where: { slug },
-        include: { seo: true, media: true, author: true },
+        relations: ['seo', 'media', 'author'],
       });
       if (!blog) {
         throw new NotFoundException(
@@ -86,14 +103,14 @@ export class BlogsService {
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException(
-        responseHelper.error('Failed to retrieve blog', error.message),
+        responseHelper.error('Failed to retrieve blog', (error as Error).message),
       );
     }
   }
 
   async update(slug: string, updateBlogDto: any) {
     try {
-      const blog = await this.prisma.blog.findUnique({ where: { slug } });
+      const blog = await this.blogRepo.findOne({ where: { slug } });
       if (!blog) {
         throw new NotFoundException(
           responseHelper.error(`Blog with slug ${slug} not found.`),
@@ -101,71 +118,75 @@ export class BlogsService {
       }
 
       const { seo, ...blogData } = updateBlogDto;
-      
-      // Handle SEO update/creation
+
       let seoId = blog.seoId;
       if (seo) {
         if (blog.seoId) {
-          // Update existing SEO record
-          await this.prisma.seo.update({
-            where: { id: blog.seoId },
-            data: {
-              metaTitle: seo.metaTitle || null,
-              metaDescription: seo.metaDescription || null,
-              metaKeywords: seo.metaKeywords || null,
-              metaCanonical: seo.metaCanonical || null,
-              schema: seo.schema || null,
-              mediaId: seo.mediaId || null,
-            },
+          const seoEnt = await this.seoRepo.findOne({ where: { id: blog.seoId } });
+          if (seoEnt) {
+            seoEnt.metaTitle = seo.metaTitle ?? seoEnt.metaTitle;
+            seoEnt.metaDescription = seo.metaDescription ?? seoEnt.metaDescription;
+            seoEnt.metaKeywords = seo.metaKeywords ?? seoEnt.metaKeywords;
+            seoEnt.metaCanonical = seo.metaCanonical ?? seoEnt.metaCanonical;
+            seoEnt.schema = seo.schema ?? seoEnt.schema;
+            if (seo.mediaId !== undefined) seoEnt.mediaId = seo.mediaId;
+            await this.seoRepo.save(seoEnt);
+          }
+        } else if (
+          seo.metaTitle ||
+          seo.metaDescription ||
+          seo.metaKeywords ||
+          seo.metaCanonical ||
+          seo.schema ||
+          seo.mediaId
+        ) {
+          const createdSeo = this.seoRepo.create({
+            metaTitle: seo.metaTitle || null,
+            metaDescription: seo.metaDescription || null,
+            metaKeywords: seo.metaKeywords || null,
+            metaCanonical: seo.metaCanonical || null,
+            schema: seo.schema || null,
+            mediaId: seo.mediaId || null,
           });
-        } else if (seo.metaTitle || seo.metaDescription || seo.metaKeywords || seo.metaCanonical || seo.schema || seo.mediaId) {
-          // Create new SEO record if none exists
-          const createdSeo = await this.prisma.seo.create({
-            data: {
-              metaTitle: seo.metaTitle || null,
-              metaDescription: seo.metaDescription || null,
-              metaKeywords: seo.metaKeywords || null,
-              metaCanonical: seo.metaCanonical || null,
-              schema: seo.schema || null,
-              mediaId: seo.mediaId || null,
-            },
-          });
+          await this.seoRepo.save(createdSeo);
           seoId = createdSeo.id;
         }
       }
 
-      const updatedBlog = await this.prisma.blog.update({
-        where: { slug },
-        data: {
-          ...blogData,
-          seoId,
-        },
-        include: { seo: true, media: true, author: true },
+      for (const [k, v] of Object.entries(blogData)) {
+        if (v !== undefined) (blog as any)[k] = v;
+      }
+      blog.seoId = seoId;
+      await this.blogRepo.save(blog);
+
+      const updatedBlog = await this.blogRepo.findOne({
+        where: { id: blog.id },
+        relations: ['seo', 'media', 'author'],
       });
       return responseHelper.success('Blog updated successfully', updatedBlog);
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException(
-        responseHelper.error('Failed to update blog', error.message),
+        responseHelper.error('Failed to update blog', (error as Error).message),
       );
     }
   }
 
   async remove(slug: string) {
     try {
-      const blog = await this.prisma.blog.findUnique({ where: { slug } });
+      const blog = await this.blogRepo.findOne({ where: { slug } });
       if (!blog) {
         throw new NotFoundException(
           responseHelper.error(`Blog with slug ${slug} not found.`),
         );
       }
-      await this.prisma.blog.delete({ where: { slug } });
+      await this.blogRepo.remove(blog);
       return responseHelper.success('Blog deleted successfully');
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException(
-        responseHelper.error('Failed to delete blog', error.message),
+        responseHelper.error('Failed to delete blog', (error as Error).message),
       );
     }
   }
-} 
+}

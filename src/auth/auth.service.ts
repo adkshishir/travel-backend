@@ -4,7 +4,10 @@ import {
   EmailRegisterDto,
   VerfiyEmailRegisterDto,
 } from './dto/create-auth.dto';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { User } from 'src/database/entities/user.entity';
+import { UserRole } from 'src/database/entities/user-role.enum';
 import { MailerService } from 'src/mail/mailer.service';
 import responseHelper from 'src/utils/response-helper';
 import { JwtService } from '@nestjs/jwt';
@@ -12,7 +15,8 @@ import { JwtService } from '@nestjs/jwt';
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly prisma: PrismaService,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
     private readonly jwtService: JwtService,
     private readonly mailerService: MailerService,
   ) {}
@@ -20,25 +24,22 @@ export class AuthService {
   async emailAuth(registerDto: EmailRegisterDto) {
     const emailSubject = 'Email Verification';
 
-    const user = await this.prisma.user.findUnique({
-      where: {
-        email: registerDto.email,
-      },
+    const user = await this.userRepo.findOne({
+      where: { email: registerDto.email },
     });
     if (!user) {
       const verifyOtp = Math.floor(100000 + Math.random() * 900000);
-      const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-      await this.prisma.user.create({
-        data: {
+      const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+      await this.userRepo.save(
+        this.userRepo.create({
           email: registerDto.email,
           otp: verifyOtp.toString(),
           otpExpiresAt,
-          role: 'USER',
-        },
-      });
+          role: UserRole.USER,
+        }),
+      );
 
       try {
-        // send this otp to phone or email to the user for verification
         await this.mailerService.sendEmailVerification(
           registerDto.email,
           verifyOtp.toString(),
@@ -56,19 +57,13 @@ export class AuthService {
     }
 
     const verifyOtp = Math.floor(100000 + Math.random() * 900000);
-    const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-    await this.prisma.user.update({
-      where: {
-        email: registerDto.email,
-      },
-      data: {
-        otp: verifyOtp.toString(),
-        otpExpiresAt,
-      },
-    });
+    const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    await this.userRepo.update(
+      { email: registerDto.email },
+      { otp: verifyOtp.toString(), otpExpiresAt },
+    );
     const emailText = `Your OTP is ${verifyOtp}`;
 
-    // send this otp to phone or email to the user for verification
     try {
       await this.mailerService.sendMail(
         registerDto.email,
@@ -86,11 +81,10 @@ export class AuthService {
       email: registerDto.email,
     });
   }
+
   async emailAuthVerify(verifyRegisterDto: VerfiyEmailRegisterDto) {
-    const existUser = await this.prisma.user.findUnique({
-      where: {
-        email: verifyRegisterDto.email,
-      },
+    const existUser = await this.userRepo.findOne({
+      where: { email: verifyRegisterDto.email },
     });
     if (!existUser) {
       throw new BadRequestException(
@@ -99,7 +93,6 @@ export class AuthService {
         }),
       );
     }
-    // Check OTP expiration (10 minutes)
     if (existUser.otpExpiresAt && existUser.otpExpiresAt < new Date()) {
       throw new BadRequestException(
         responseHelper.error('OTP has expired. Please request a new one.', {
@@ -109,22 +102,18 @@ export class AuthService {
     }
 
     if (existUser.otp === verifyRegisterDto.otp) {
-      const token = this.jwtService.sign(existUser, {
-        secret: process.env.JWT_SECRET,
+      const token = this.jwtService.sign({
+        id: existUser.id,
+        email: existUser.email,
+        role: existUser.role,
       });
-      const user = await this.prisma.user.update({
-        where: {
-          email: verifyRegisterDto.email,
-        },
-        data: {
-          otp: null,
-          otpExpiresAt: null,
-        },
-        select: {
-          id: true,
-          email: true,
-          phone: true,
-        },
+      await this.userRepo.update(
+        { email: verifyRegisterDto.email },
+        { otp: null, otpExpiresAt: null },
+      );
+      const user = await this.userRepo.findOne({
+        where: { email: verifyRegisterDto.email },
+        select: ['id', 'email', 'phone'],
       });
       return responseHelper.success('User verified successfully', {
         user: {
@@ -134,44 +123,41 @@ export class AuthService {
         },
         token,
       });
-    } else {
-      throw new BadRequestException(
-        responseHelper.error('Invalid OTP', {
-          otp: ['Invalid OTP'],
-        }),
-      );
     }
+    throw new BadRequestException(
+      responseHelper.error('Invalid OTP', {
+        otp: ['Invalid OTP'],
+      }),
+    );
   }
+
   async initAdmins() {
-    const user = await this.prisma.user.findUnique({
-      where: {
-        email: process.env.ADMIN_EMAIL || 'adhikarishishir50@gmail.com',
-      },
-    });
+    const adminEmail = process.env.ADMIN_EMAIL || 'adhikarishishir50@gmail.com';
+    const user = await this.userRepo.findOne({ where: { email: adminEmail } });
     if (!user) {
-      await this.prisma.user.create({
-        data: {
-          email: process.env.ADMIN_EMAIL || 'adhikarishishir50@gmail.com',
-          role: 'ADMIN',
-        },
-      });
-      return responseHelper.success('Admin created successfully');
-    } else {
-      throw new BadRequestException(
-        responseHelper.error('Admin already exists', {
-          email: ['Admin already exists'],
+      await this.userRepo.save(
+        this.userRepo.create({
+          email: adminEmail,
+          role: UserRole.ADMIN,
         }),
       );
+      return responseHelper.success('Admin created successfully');
     }
+    throw new BadRequestException(
+      responseHelper.error('Admin already exists', {
+        email: ['Admin already exists'],
+      }),
+    );
   }
+
   async createAdmin(createAdminDto: CreateAdminDto) {
     try {
-      const admin = await this.prisma.user.create({
-        data: {
+      const admin = await this.userRepo.save(
+        this.userRepo.create({
           ...createAdminDto,
-          role: 'ADMIN',
-        },
-      });
+          role: UserRole.ADMIN,
+        }),
+      );
       return responseHelper.success('Admin created successfully', admin);
     } catch (error) {
       throw new InternalServerErrorException(

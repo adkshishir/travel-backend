@@ -1,52 +1,54 @@
 import { Injectable, ConflictException } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import responseHelper from 'src/utils/response-helper';
 import { CreateNewsletterDto } from './dto/create-newsletter.dto';
+import { Newsletter } from 'src/database/entities/newsletter.entity';
 
 @Injectable()
 export class NewsletterService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @InjectRepository(Newsletter)
+    private readonly newsletterRepo: Repository<Newsletter>,
+  ) {}
 
   async subscribe(dto: CreateNewsletterDto) {
-    const existing = await this.prisma.newsletter.findUnique({
+    const existing = await this.newsletterRepo.findOne({
       where: { email: dto.email },
     });
     if (existing) {
       if (existing.isActive) {
         throw new ConflictException(responseHelper.error('Email already subscribed'));
       }
-      const reactivated = await this.prisma.newsletter.update({
-        where: { email: dto.email },
-        data: { isActive: true, name: dto.name ?? existing.name },
-      });
+      existing.isActive = true;
+      if (dto.name !== undefined) existing.name = dto.name;
+      const reactivated = await this.newsletterRepo.save(existing);
       return responseHelper.success('Successfully resubscribed to newsletter', reactivated);
     }
-    const subscriber = await this.prisma.newsletter.create({ data: dto });
+    const subscriber = this.newsletterRepo.create(dto);
+    await this.newsletterRepo.save(subscriber);
     return responseHelper.success('Successfully subscribed to newsletter', subscriber);
   }
 
   async unsubscribe(email: string) {
-    const existing = await this.prisma.newsletter.findUnique({ where: { email } });
+    const existing = await this.newsletterRepo.findOne({ where: { email } });
     if (!existing) {
       return responseHelper.success('Email not found in subscription list');
     }
-    await this.prisma.newsletter.update({
-      where: { email },
-      data: { isActive: false },
-    });
+    await this.newsletterRepo.update({ email }, { isActive: false });
     return responseHelper.success('Successfully unsubscribed from newsletter');
   }
 
   async findAll(page = 1, limit = 20) {
     const skip = (page - 1) * limit;
     const [items, total] = await Promise.all([
-      this.prisma.newsletter.findMany({
+      this.newsletterRepo.find({
         where: { isActive: true },
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        order: { createdAt: 'DESC' },
       }),
-      this.prisma.newsletter.count({ where: { isActive: true } }),
+      this.newsletterRepo.count({ where: { isActive: true } }),
     ]);
     return responseHelper.success('Subscribers fetched', {
       items,
@@ -58,7 +60,7 @@ export class NewsletterService {
   }
 
   async remove(id: number) {
-    await this.prisma.newsletter.delete({ where: { id } });
+    await this.newsletterRepo.delete({ id });
     return responseHelper.success('Subscriber deleted');
   }
 }

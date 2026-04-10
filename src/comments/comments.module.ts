@@ -1,11 +1,13 @@
 import { Module } from '@nestjs/common';
-import { CommentsController } from './comments.controller';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { CommentsService } from './comments.service';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { JwtService } from '@nestjs/jwt';
+import { CommentsController } from './comments.controller';
+import { Comment } from 'src/database/entities/comment.entity';
+import { AuthModule } from 'src/auth/auth.module';
 
 @Module({
+  imports: [AuthModule, TypeOrmModule.forFeature([Comment])],
   controllers: [CommentsController],
-  providers: [CommentsService, PrismaService, JwtService],
+  providers: [CommentsService],
 })
 export class CommentsModule {}

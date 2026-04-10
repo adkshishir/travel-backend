@@ -1,11 +1,19 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { PackagesService } from './packages.service';
 import { PackagesController } from './packages.controller';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { JwtService } from '@nestjs/jwt';
+import { Package } from 'src/database/entities/package.entity';
+import { Media } from 'src/database/entities/media.entity';
+import { Seo } from 'src/database/entities/seo.entity';
+import { Faq } from 'src/database/entities/faq.entity';
+import { AuthModule } from 'src/auth/auth.module';
 
 @Module({
+  imports: [
+    AuthModule,
+    TypeOrmModule.forFeature([Package, Media, Seo, Faq]),
+  ],
   controllers: [PackagesController],
-  providers: [PackagesService, PrismaService, JwtService],
+  providers: [PackagesService],
 })
 export class PackagesModule {}

@@ -1,11 +1,13 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { SeoService } from './seo.service';
 import { SeoController } from './seo.controller';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { JwtService } from '@nestjs/jwt';
+import { Seo } from 'src/database/entities/seo.entity';
+import { AuthModule } from 'src/auth/auth.module';
 
 @Module({
+  imports: [AuthModule, TypeOrmModule.forFeature([Seo])],
   controllers: [SeoController],
-  providers: [SeoService, PrismaService, JwtService],
+  providers: [SeoService],
 })
 export class SeoModule {}

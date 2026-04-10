@@ -1,12 +1,14 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { DestinationsService } from './destinations.service';
 import { DestinationsController } from './destinations.controller';
-import { PrismaService } from 'src//prisma/prisma.service';
-import { UploadService } from 'src/upload/upload.service';
-import { JwtService } from '@nestjs/jwt';
+import { Destination } from 'src/database/entities/destination.entity';
+import { Seo } from 'src/database/entities/seo.entity';
+import { AuthModule } from 'src/auth/auth.module';
 
 @Module({
+  imports: [AuthModule, TypeOrmModule.forFeature([Destination, Seo])],
   controllers: [DestinationsController],
-  providers: [DestinationsService,PrismaService,UploadService,JwtService],
+  providers: [DestinationsService],
 })
 export class DestinationsModule {}

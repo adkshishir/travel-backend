@@ -1,24 +1,27 @@
 import { Injectable, NotFoundException, InternalServerErrorException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { UpdateReviewDto } from './dto/update-review.dto';
-import { PrismaService } from 'src/prisma/prisma.service';
 import responseHelper from 'src/utils/response-helper';
 import { PaginationDto } from 'src/utils/pagination.dto';
+import { Review } from 'src/database/entities/review.entity';
 
 @Injectable()
 export class ReviewsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    @InjectRepository(Review)
+    private readonly reviewRepo: Repository<Review>,
+  ) {}
+
   async create(createReviewDto: CreateReviewDto) {
     try {
-      const newReview = await this.prisma.review.create({
-        data: {
-          ...createReviewDto,
-        },
-      });
+      const newReview = this.reviewRepo.create(createReviewDto as any);
+      await this.reviewRepo.save(newReview);
       return responseHelper.success('Review created successfully', newReview);
     } catch (error) {
       throw new InternalServerErrorException(
-        responseHelper.error('Failed to create review', error.message),
+        responseHelper.error('Failed to create review', (error as Error).message),
       );
     }
   }
@@ -29,20 +32,13 @@ export class ReviewsService {
 
     try {
       const [items, total] = await Promise.all([
-        this.prisma.review.findMany({
+        this.reviewRepo.find({
           skip,
           take: limit,
-          include: {
-            media: {
-              select: {
-                thumbnail: true,
-                alt: true,
-              },
-            },
-          },
-          orderBy: { createdAt: 'desc' },
+          relations: ['media'],
+          order: { createdAt: 'DESC' },
         }),
-        this.prisma.review.count(),
+        this.reviewRepo.count(),
       ]);
 
       return responseHelper.success('All reviews', {
@@ -54,20 +50,16 @@ export class ReviewsService {
       });
     } catch (error) {
       throw new InternalServerErrorException(
-        responseHelper.error('Failed to retrieve reviews', error.message),
+        responseHelper.error('Failed to retrieve reviews', (error as Error).message),
       );
     }
   }
 
   async findOne(id: number) {
     try {
-      const review = await this.prisma.review.findUnique({
-        where: {
-          id,
-        },
-        include: {
-          media: true,
-        },
+      const review = await this.reviewRepo.findOne({
+        where: { id },
+        relations: ['media'],
       });
       if (!review) {
         throw new NotFoundException(
@@ -78,62 +70,44 @@ export class ReviewsService {
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException(
-        responseHelper.error('Failed to retrieve review', error.message),
+        responseHelper.error('Failed to retrieve review', (error as Error).message),
       );
     }
   }
 
   async update(id: number, updateReviewDto: UpdateReviewDto) {
     try {
-      const review = await this.prisma.review.findUnique({
-        where: {
-          id,
-        },
-      });
+      const review = await this.reviewRepo.findOne({ where: { id } });
       if (!review) {
         throw new NotFoundException(
           responseHelper.error(`Review with ID ${id} not found.`),
         );
       }
-      const updatedReview = await this.prisma.review.update({
-        where: {
-          id,
-        },
-        data: {
-          ...updateReviewDto,
-        },
-      });
+      Object.assign(review, updateReviewDto);
+      const updatedReview = await this.reviewRepo.save(review);
       return responseHelper.success('Review updated successfully', updatedReview);
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException(
-        responseHelper.error('Failed to update review', error.message),
+        responseHelper.error('Failed to update review', (error as Error).message),
       );
     }
   }
 
   async remove(id: number) {
     try {
-      const review = await this.prisma.review.findUnique({
-        where: {
-          id,
-        },
-      });
+      const review = await this.reviewRepo.findOne({ where: { id } });
       if (!review) {
         throw new NotFoundException(
           responseHelper.error(`Review with ID ${id} not found.`),
         );
       }
-      await this.prisma.review.delete({
-        where: {
-          id,
-        },
-      });
+      await this.reviewRepo.remove(review);
       return responseHelper.success('Review deleted successfully');
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException(
-        responseHelper.error('Failed to delete review', error.message),
+        responseHelper.error('Failed to delete review', (error as Error).message),
       );
     }
   }

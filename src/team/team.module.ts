@@ -1,11 +1,13 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { TeamService } from './team.service';
 import { TeamController } from './team.controller';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { JwtService } from '@nestjs/jwt';
+import { Team } from 'src/database/entities/team.entity';
+import { AuthModule } from 'src/auth/auth.module';
 
 @Module({
+  imports: [AuthModule, TypeOrmModule.forFeature([Team])],
   controllers: [TeamController],
-  providers: [TeamService, PrismaService, JwtService],
+  providers: [TeamService],
 })
 export class TeamModule {}

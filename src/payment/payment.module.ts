@@ -1,17 +1,14 @@
 import { Module } from '@nestjs/common';
-import { PaymentController } from './payment.controller';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { PaymentService } from './payment.service';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { JwtModule } from '@nestjs/jwt';
+import { PaymentController } from './payment.controller';
+import { Booking } from 'src/database/entities/booking.entity';
+import { Payment } from 'src/database/entities/payment.entity';
+import { AuthModule } from 'src/auth/auth.module';
 
 @Module({
-  imports: [
-    JwtModule.register({
-      secret: process.env.JWT_SECRET,
-      signOptions: { expiresIn: '7d' },
-    }),
-  ],
+  imports: [AuthModule, TypeOrmModule.forFeature([Booking, Payment])],
   controllers: [PaymentController],
-  providers: [PaymentService, PrismaService],
+  providers: [PaymentService],
 })
 export class PaymentModule {}

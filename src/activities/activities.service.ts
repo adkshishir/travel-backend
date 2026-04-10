@@ -1,18 +1,25 @@
 import { HttpException, Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { CreateActivityDto } from './dto/create-activity.dto';
 import { UpdateActivityDto } from './dto/update-activity.dto';
-import { PrismaService } from 'src/prisma/prisma.service';
 import responseHelper from 'src/utils/response-helper';
 import { PaginationDto } from 'src/utils/pagination.dto';
+import { Activity } from 'src/database/entities/activity.entity';
+import { Seo } from 'src/database/entities/seo.entity';
 
 @Injectable()
 export class ActivitiesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    @InjectRepository(Activity)
+    private readonly activityRepo: Repository<Activity>,
+    @InjectRepository(Seo)
+    private readonly seoRepo: Repository<Seo>,
+  ) {}
+
   async create(createActivityDto: CreateActivityDto) {
-    const exist = await this.prisma.activity.findUnique({
-      where: {
-        slug: createActivityDto.slug,
-      },
+    const exist = await this.activityRepo.findOne({
+      where: { slug: createActivityDto.slug },
     });
     if (exist) {
       throw new NotFoundException(
@@ -21,87 +28,76 @@ export class ActivitiesService {
     }
 
     try {
-      const activity = await this.prisma.activity.create({
-        data: {
-          name: createActivityDto.name,
-          description: createActivityDto.description,
-          slug: createActivityDto.slug,
-          media: {
-            connect: createActivityDto.mediaId
-              ? {
-                  id: createActivityDto.mediaId || undefined,
-                }
-              : undefined,
-          },
-          seo: {
-            create: {
-              ...createActivityDto.seo,
-              mediaId: createActivityDto.seo?.mediaId || undefined,
-            },
-          },
-        },
-        include: {
-          seo: {
-            include: {
-              media: true,
-            },
-          },
-          media: true,
-        },
+      let seoId: number | null = null;
+      if (createActivityDto.seo) {
+        const seoRow = this.seoRepo.create({
+          ...createActivityDto.seo,
+          mediaId: createActivityDto.seo?.mediaId ?? null,
+        } as Partial<Seo>);
+        await this.seoRepo.save(seoRow);
+        seoId = seoRow.id;
+      }
+
+      const activity = this.activityRepo.create({
+        name: createActivityDto.name,
+        description: createActivityDto.description,
+        slug: createActivityDto.slug,
+        mediaId: createActivityDto.mediaId ?? null,
+        seoId,
       });
-      return responseHelper.success('Activity created', activity);
+      await this.activityRepo.save(activity);
+
+      const full = await this.activityRepo.findOne({
+        where: { id: activity.id },
+        relations: ['seo', 'seo.media', 'media'],
+      });
+      return responseHelper.success('Activity created', full);
     } catch (error) {
       throw new HttpException(
-        responseHelper.error('Activity not created', error.message),
+        responseHelper.error('Activity not created', (error as Error).message),
         400,
       );
     }
   }
 
   async navItems() {
-    const activities = await this.prisma.activity.findMany({
-      select: {
-        name: true,
-        slug: true,
-        destinations: {
-          select: {
-            name: true,
-            slug: true,
-            packages: {
-              select: {
-                title: true,
-                slug: true,
-              },
-            },
-          },
-        },
-      },
+    const activities = await this.activityRepo.find({
+      relations: ['destinations', 'destinations.packages'],
     });
-    return responseHelper.success('All activities', activities);
+    const shaped = activities.map((a) => ({
+      name: a.name,
+      slug: a.slug,
+      destinations: (a.destinations || []).map((d) => ({
+        name: d.name,
+        slug: d.slug,
+        packages: (d.packages || []).map((p) => ({
+          title: p.title,
+          slug: p.slug,
+        })),
+      })),
+    }));
+    return responseHelper.success('All activities', shaped);
   }
 
   async findAll(paginationDto: PaginationDto) {
     const { page = 1, limit = 10 } = paginationDto;
     const skip = (page - 1) * limit;
 
-    const [items, total] = await Promise.all([
-      this.prisma.activity.findMany({
-        skip,
-        take: limit,
-        // for update activites seos
-        include: {
-          _count: true,
-          media: {
-            select: {
-              thumbnail: true,
-              alt: true,
-            },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-      }),
-      this.prisma.activity.count(),
-    ]);
+    const rows = await this.activityRepo
+      .createQueryBuilder('act')
+      .leftJoinAndSelect('act.media', 'media')
+      .loadRelationCountAndMap('act.destCount', 'act.destinations')
+      .orderBy('act.createdAt', 'DESC')
+      .skip(skip)
+      .take(limit)
+      .getMany();
+
+    const total = await this.activityRepo.count();
+
+    const items = rows.map((a: any) => {
+      const { destCount, ...rest } = a;
+      return { ...rest, _count: { destinations: destCount ?? 0 } };
+    });
 
     return responseHelper.success('All activities', {
       items,
@@ -113,41 +109,9 @@ export class ActivitiesService {
   }
 
   async findOne(slug: string) {
-    const activity = await this.prisma.activity.findUnique({
-      where: {
-        slug,
-      },
-      include: {
-        seo: {
-          select: {
-            metaTitle: true,
-            metaCanonical: true,
-            metaDescription: true,
-            metaKeywords: true,
-            schema: true,
-            media: {
-              select: {
-                thumbnail: true,
-                id: true,
-                alt: true,
-              },
-            },
-          },
-        },
-        media: true,
-        destinations: {
-          select: {
-            name: true,
-            slug: true,
-
-            media: {
-              select: {
-                thumbnail: true,
-              },
-            },
-          },
-        },
-      },
+    const activity = await this.activityRepo.findOne({
+      where: { slug },
+      relations: ['seo', 'seo.media', 'media', 'destinations', 'destinations.media'],
     });
     if (!activity) {
       throw new NotFoundException(
@@ -158,64 +122,43 @@ export class ActivitiesService {
   }
 
   async update(id: number, updateActivityDto: UpdateActivityDto) {
-    const old = await this.prisma.activity.findUnique({
-      where: {
-        id,
-      },
-    });
+    const old = await this.activityRepo.findOne({ where: { id } });
     if (!old) {
       throw new NotFoundException(
         responseHelper.error('Activity not found', null),
       );
     }
-    const activity = await this.prisma.activity.update({
+    if (updateActivityDto.seo && old.seoId) {
+      const seo = await this.seoRepo.findOne({ where: { id: old.seoId } });
+      if (seo) {
+        for (const [k, v] of Object.entries(updateActivityDto.seo)) {
+          if (v !== undefined) (seo as any)[k] = v;
+        }
+        await this.seoRepo.save(seo);
+      }
+    }
+    if (updateActivityDto.name !== undefined) old.name = updateActivityDto.name;
+    if (updateActivityDto.description !== undefined)
+      old.description = updateActivityDto.description;
+    if (updateActivityDto.slug !== undefined) old.slug = updateActivityDto.slug;
+    if (updateActivityDto.mediaId !== undefined) old.mediaId = updateActivityDto.mediaId;
+    await this.activityRepo.save(old);
+
+    const activity = await this.activityRepo.findOne({
       where: { id },
-      data: {
-        name: updateActivityDto.name,
-        description: updateActivityDto.description,
-        slug: updateActivityDto.slug,
-        media: {
-          connect: updateActivityDto.mediaId
-            ? {
-                id: updateActivityDto.mediaId || undefined,
-              }
-            : undefined,
-        },
-        seo: {
-          update: {
-            ...updateActivityDto.seo,
-            mediaId: updateActivityDto.seo?.mediaId || undefined,
-          },
-        },
-      },
-      include: {
-        seo: {
-          include: {
-            media: true,
-          },
-        },
-        media: true,
-      },
+      relations: ['seo', 'seo.media', 'media'],
     });
     return responseHelper.success('Activity updated successfully', activity);
   }
 
   async remove(id: number) {
-    const activity = await this.prisma.activity.findUnique({
-      where: {
-        id,
-      },
-    });
+    const activity = await this.activityRepo.findOne({ where: { id } });
     if (!activity) {
       throw new NotFoundException(
         responseHelper.error('Activity not found', null),
       );
     }
-    const response = await this.prisma.activity.delete({
-      where: {
-        id,
-      },
-    });
-    return responseHelper.success('Activity deleted successfully', response);
+    await this.activityRepo.remove(activity);
+    return responseHelper.success('Activity deleted successfully', activity);
   }
 }

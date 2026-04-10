@@ -1,23 +1,31 @@
-import { Injectable, NotFoundException, InternalServerErrorException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import {
+  Injectable,
+  NotFoundException,
+  InternalServerErrorException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingDto } from './dto/update-booking.dto';
 import responseHelper from 'src/utils/response-helper';
 import { PaginationDto } from 'src/utils/pagination.dto';
+import { Booking } from 'src/database/entities/booking.entity';
 
 @Injectable()
 export class BookingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @InjectRepository(Booking)
+    private readonly bookingRepo: Repository<Booking>,
+  ) {}
 
   async create(createBookingDto: CreateBookingDto) {
     try {
-      const booking = await this.prisma.booking.create({
-        data: createBookingDto,
-      });
+      const booking = this.bookingRepo.create(createBookingDto as any);
+      await this.bookingRepo.save(booking);
       return responseHelper.success('Booking created successfully', booking);
     } catch (error) {
       throw new InternalServerErrorException(
-        responseHelper.error('Failed to create booking', error.message),
+        responseHelper.error('Failed to create booking', (error as Error).message),
       );
     }
   }
@@ -28,72 +36,38 @@ export class BookingService {
 
     try {
       const [items, total] = await Promise.all([
-        this.prisma.booking.findMany({
+        this.bookingRepo.find({
           skip,
           take: limit,
-          include: {
-            package: {
-              select: {
-                id: true,
-                title: true,
-                slug: true,
-                price: true,
-                destination: {
-                  select: {
-                    id: true,
-                    name: true,
-                    slug: true,
-                    activity: {
-                      select: {
-                        id: true,
-                        name: true,
-                        slug: true,
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          },
-          orderBy: {
-            createdAt: 'desc'
-          }
+          relations: ['package', 'package.destination', 'package.destination.activity'],
+          order: { createdAt: 'DESC' },
         }),
-        this.prisma.booking.count(),
+        this.bookingRepo.count(),
       ]);
 
-      return responseHelper.success(
-        'All bookings retrieved successfully',
-        {
-          items,
-          total,
-          page,
-          limit,
-          totalPages: Math.ceil(total / limit),
-        },
-      );
+      return responseHelper.success('All bookings retrieved successfully', {
+        items,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      });
     } catch (error) {
       throw new InternalServerErrorException(
-        responseHelper.error('Failed to retrieve bookings', error.message),
+        responseHelper.error('Failed to retrieve bookings', (error as Error).message),
       );
     }
   }
 
   async findOne(id: number) {
     try {
-      const booking = await this.prisma.booking.findUnique({
+      const booking = await this.bookingRepo.findOne({
         where: { id },
-        include: {
-          package: {
-            include: {
-              destination: {
-                include: {
-                  activity: true
-                }
-              }
-            }
-          }
-        }
+        relations: [
+          'package',
+          'package.destination',
+          'package.destination.activity',
+        ],
       });
       if (!booking) {
         throw new NotFoundException(
@@ -104,44 +78,44 @@ export class BookingService {
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException(
-        responseHelper.error('Failed to retrieve booking', error.message),
+        responseHelper.error('Failed to retrieve booking', (error as Error).message),
       );
     }
   }
 
   async update(id: number, updateBookingDto: UpdateBookingDto) {
     try {
-      const booking = await this.prisma.booking.update({
-        where: { id },
-        data: updateBookingDto,
-      });
-      return responseHelper.success('Booking updated successfully', booking);
-    } catch (error) {
-      if (error.code === 'P2025') {
+      const existing = await this.bookingRepo.findOne({ where: { id } });
+      if (!existing) {
         throw new NotFoundException(
           responseHelper.error(`Booking with ID ${id} not found`),
         );
       }
+      Object.assign(existing, updateBookingDto);
+      const booking = await this.bookingRepo.save(existing);
+      return responseHelper.success('Booking updated successfully', booking);
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException(
-        responseHelper.error('Failed to update booking', error.message),
+        responseHelper.error('Failed to update booking', (error as Error).message),
       );
     }
   }
 
   async remove(id: number) {
     try {
-      const booking = await this.prisma.booking.delete({
-        where: { id },
-      });
-      return responseHelper.success('Booking deleted successfully', booking);
-    } catch (error) {
-      if (error.code === 'P2025') {
+      const existing = await this.bookingRepo.findOne({ where: { id } });
+      if (!existing) {
         throw new NotFoundException(
           responseHelper.error(`Booking with ID ${id} not found`),
         );
       }
+      await this.bookingRepo.remove(existing);
+      return responseHelper.success('Booking deleted successfully', existing);
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException(
-        responseHelper.error('Failed to delete booking', error.message),
+        responseHelper.error('Failed to delete booking', (error as Error).message),
       );
     }
   }

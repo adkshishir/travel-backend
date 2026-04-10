@@ -11,7 +11,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@master
@@ -24,5 +24,5 @@ jobs:
             git pull origin main  # Pull latest changes
             npm ci  # Install dependencies (if needed)
             npm run build  # Build project (if applicable)
-            npx prisma migrate dev --name "update_migration"
+            npm run migration:run  # Apply TypeORM migrations (baseline is no-op; future DDL only)
             pm2 restart api.poonhill  # Restart the app if using PM2

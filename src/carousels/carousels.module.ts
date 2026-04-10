@@ -1,12 +1,13 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { CarouselsService } from './carousels.service';
 import { CarouselsController } from './carousels.controller';
-import { UploadService } from 'src/upload/upload.service';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { JwtService } from '@nestjs/jwt';
+import { Carousel } from 'src/database/entities/carousel.entity';
+import { AuthModule } from 'src/auth/auth.module';
 
 @Module({
+  imports: [AuthModule, TypeOrmModule.forFeature([Carousel])],
   controllers: [CarouselsController],
-  providers: [CarouselsService, PrismaService, UploadService,JwtService],
+  providers: [CarouselsService],
 })
 export class CarouselsModule {}
