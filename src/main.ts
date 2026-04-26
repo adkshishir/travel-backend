@@ -22,8 +22,8 @@ async function bootstrap() {
   app.use(bodyParser.urlencoded({ limit: '5mb', extended: true }));
   app.enableCors(corsOptions);
   const config = new DocumentBuilder()
-    .setTitle('Poon Hill Api')
-    .setDescription('The Poon Hill API description')
+    .setTitle('Travel Api')
+    .setDescription('The Travel API description')
     .setVersion('1.0')
     .addBearerAuth()
     .build();

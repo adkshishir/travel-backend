@@ -16,7 +16,7 @@ export class MailerService {
   async sendForgotPasswordEmail(to: string, resetToken: string) {
     const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
     await this.transporter.sendMail({
-      from: "'Poon HIll' <" + process.env.MAIL_FROM + '>',
+      from: "'Travel' <" + process.env.MAIL_FROM + '>',
       to,
       subject: 'Password Reset Request',
       html: ` <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
@@ -56,7 +56,7 @@ export class MailerService {
     html?: string,
   ): Promise<void> {
     await this.transporter.sendMail({
-      from: `'Poon HIll' <${process.env.MAIL_FROM}>`,
+      from: `'Travel' <${process.env.MAIL_FROM}>`,
       to,
       subject,
       text,
@@ -65,7 +65,7 @@ export class MailerService {
   }
   async sendEmailVerification(to: string, verifyOtp: string) {
     await this.transporter.sendMail({
-      from: `'Poon HIll' <${process.env.MAIL_FROM}>`,
+      from: `'Travel' <${process.env.MAIL_FROM}>`,
       to,
       subject: 'Email Verification',
       html: `
@@ -77,4 +77,4 @@ export class MailerService {
       `,
     });
   }
-} 
+}
